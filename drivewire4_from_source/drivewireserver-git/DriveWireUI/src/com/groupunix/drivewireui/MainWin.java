@@ -1,6 +1,6 @@
 package com.groupunix.drivewireui;
 
-import DriveWireUI.src.com.groupunix.drivewireui.DWImageMounter;
+import com.groupunix.drivewireui.DWImageMounter;
 import com.google.common.io.Resources;
 import java.io.File;
 import java.io.FileInputStream;

@@ -2,7 +2,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package DriveWireUI.src.com.groupunix.drivewireui;
+package com.groupunix.drivewireui;
 
 import com.groupunix.drivewireui.MainWin;
 import com.groupunix.drivewireui.SendCommandWin;
@@ -125,8 +125,9 @@ public class DWImageMounter extends Dialog {
 
 
             } catch (FileSystemException e) {
-                // TODO Auto-generated catch block
-
+                showError("File System Error", "Error accessing file: " + e.getMessage());
+            } catch (Exception e) {
+                showError("Error Loading Disk", "Unexpected error: " + e.getMessage());
             }
 
         } else {
@@ -162,11 +163,15 @@ public class DWImageMounter extends Dialog {
 
         String filename = null;
 
-        int lastslash = location.lastIndexOf('/');
+        // Handle both Unix (/) and Windows (\) path separators
+        int lastslash = Math.max(location.lastIndexOf('/'), location.lastIndexOf('\\'));
 
-        // parse up url
-        if ((lastslash > 0) && (lastslash < location.length() - 2)) {
+        // parse up url/path
+        if (lastslash >= 0 && lastslash < location.length() - 1) {
             filename = location.substring(lastslash + 1);
+        } else {
+            // No path separator found, assume entire string is filename
+            filename = location;
         }
 
         return filename;

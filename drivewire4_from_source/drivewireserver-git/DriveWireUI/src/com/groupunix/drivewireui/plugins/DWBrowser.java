@@ -1,6 +1,6 @@
 package com.groupunix.drivewireui.plugins;
 
-import DriveWireUI.src.com.groupunix.drivewireui.DWImageMounter;
+import com.groupunix.drivewireui.DWImageMounter;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
 import java.util.List;
