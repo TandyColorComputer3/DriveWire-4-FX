@@ -12,7 +12,7 @@ This project modernizes the DriveWire 4 UI by migrating from Eclipse SWT to Java
 - **Better UX**: Improved disk management, configuration wizards, and real-time statistics
 - **Persistence**: Disks and preferences remembered across sessions
 
-## Features
+## Latest Fixes
 
 - ✅ Complete JavaFX UI migration (SWT → JavaFX 21)
 - ✅ FXML-based declarative layouts
@@ -61,14 +61,3 @@ This will create `DriveWireUI.jar` in the `DriveWireUI` directory.
 - `drivewire4_from_source/drivewireserver-git/DriveWireUI/src/com/groupunix/drivewireui/css/` - Stylesheets
 - `drivewire4_from_source/drivewireserver-git/java/src/` - DriveWire server core
 
-## Status
-
-🚧 **Active Development** 
-
-## License
-
-[Original DriveWire 4 license applies]
-
-## Contributing
-
-Contributions welcome! This is a modernization effort to bring DriveWire 4 into the modern Java ecosystem while maintaining full compatibility with the existing DriveWire server.
