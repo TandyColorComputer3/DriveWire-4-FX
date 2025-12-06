@@ -63,13 +63,5 @@ This will create `DriveWireUI.jar` in the `DriveWireUI` directory.
 
 ## Status
 
-🚧 **Active Development** - The JavaFX migration is complete and functional. The UI is modern, responsive, and ready for use.
-
-## License
-
-[Original DriveWire 4 license applies]
-
-## Contributing
-
-Contributions welcome! This is a modernization effort to bring DriveWire 4 into the modern Java ecosystem while maintaining full compatibility with the existing DriveWire server.
+🚧 **Active Development** 
 
