@@ -139,7 +139,7 @@ public class MainWin {
 
     public static LibraryItem[] libraryroot;
 
-    private static int currentDisk = 0;
+    static int currentDisk = 0; // Package-private for JavaFX access
 
     protected static Shell shell;
 
@@ -147,11 +147,11 @@ public class MainWin {
     private static int cmdhistpos = 0;
     private static Display display;
 
-    private static String host;
-    private static int port;
-    private static int instance;
+    static String host; // Package-private for JavaFX access
+    static int port; // Package-private for JavaFX access
+    static int instance; // Package-private for JavaFX access
 
-    private static Boolean connected = false;
+    static Boolean connected = false; // Package-private for JavaFX access
 
     public static Table table;
 
@@ -179,14 +179,18 @@ public class MainWin {
     private static Menu menuMIDIProfiles;
     private static MenuItem mntmSetProfile;
     private static MenuItem mntmSetOutput;
-    private static Thread dwThread;
-    private static Thread nsThread;
+    static Thread dwThread; // Package-private for JavaFX access
+    static Thread nsThread; // Package-private for JavaFX access
     public static CTabFolder tabFolderOutput;
 
     private static SyncThread syncObj;
 
-    private static DiskDef[] disks = new DiskDef[256];
+    static DiskDef[] disks = new DiskDef[256]; // Package-private for JavaFX access
     private static MIDIStatus midiStatus;
+    
+    // JavaFX controller reference (set by MainWinFX)
+    // Note: This class may not be available if JavaFX SDK is not installed
+    public static Object mainWindowController; // Using Object to avoid compile dependency
 
     public static Color colorWhite;
     public static Color colorRed;
@@ -230,7 +234,7 @@ public class MainWin {
     protected static Image diskBigLEDred;
     protected static Image diskBigLEDdark;
 
-    private static DiskTableUpdateThread diskTableUpdater;
+    static DiskTableUpdateThread diskTableUpdater; // Package-private for JavaFX access
     protected static boolean safeshutdown = false;
 
     private static ServerConfigWin serverconfigwin;
@@ -503,7 +507,7 @@ public class MainWin {
         }
     }
 
-    private static void startDWServer(final String[] args) {
+    static void startDWServer(final String[] args) { // Package-private for JavaFX access
         dwThread = new Thread(new Runnable() {
 
             @Override
@@ -733,7 +737,26 @@ public class MainWin {
             txt += "Instance " + instance + ")";
         }
 
-        shell.setText(txt);
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        if (isJavaFXMode && mainWindowController != null) {
+            // Update JavaFX stage title via reflection
+            try {
+                java.lang.reflect.Method updateTitleMethod = mainWindowController.getClass().getMethod("updateTitle", String.class);
+                updateTitleMethod.invoke(mainWindowController, txt);
+            } catch (Exception e) {
+                // If reflection fails, just log it (don't crash)
+                System.err.println("Could not update JavaFX title: " + e.getMessage());
+            }
+        } else if (shell != null && !shell.isDisposed()) {
+            // Update SWT shell title
+            try {
+                shell.setText(txt);
+            } catch (Exception e) {
+                // If shell is disposed, ignore
+            }
+        }
     }
 
     /**
@@ -1811,28 +1834,43 @@ public class MainWin {
 
         });
 
-        // display progress..
-        ShutdownWin sdwin = new ShutdownWin(shell, SWT.DIALOG_TRIM);
-
-        sdwin.open();
-
-        // yeah right
-        sdwin.setStatus("Encouraging consistency...", 10);
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        // display progress.. (only in SWT mode)
+        ShutdownWin sdwin = null;
+        if (!isJavaFXMode && shell != null) {
+            try {
+                sdwin = new ShutdownWin(shell, SWT.DIALOG_TRIM);
+                sdwin.open();
+                // yeah right
+                sdwin.setStatus("Encouraging consistency...", 10);
+            } catch (Exception e) {
+                // ShutdownWin not available, continue without progress dialog
+                System.out.println("ShutdownWin not available, shutting down without progress dialog");
+            }
+        }
 
         // kill sync
         MainWin.host = null;
         MainWin.ready = false;
-        MainWin.syncObj.die();
+        if (MainWin.syncObj != null) {
+            MainWin.syncObj.die();
+        }
 
         if (config.getBoolean("TermServerOnExit", false) || config.getBoolean("LocalServer", false)) {
-            sdwin.setStatus("Stopping DriveWire server...", 25);
+            if (sdwin != null) {
+                sdwin.setStatus("Stopping DriveWire server...", 25);
+            }
             // sendCommand("ui server terminate");
             stopDWServer();
         }
 
-        // save window pos
-        if (shell != null) {
-            sdwin.setStatus("Saving main window layout...", 40);
+        // save window pos (only in SWT mode)
+        if (!isJavaFXMode && shell != null) {
+            if (sdwin != null) {
+                sdwin.setStatus("Saving main window layout...", 40);
+            }
 
             config.setProperty("MainWin_Width", shell.getSize().x);
             config.setProperty("MainWin_Height", shell.getSize().y);
@@ -1847,17 +1885,23 @@ public class MainWin {
                 config.setProperty("SashForm_Weights", sashForm.getWeights());
             }
 
-            sdwin.setStatus("Saving main window layout...", 50);
+            if (sdwin != null) {
+                sdwin.setStatus("Saving main window layout...", 50);
+            }
 
             for (int i = 0; i < table.getColumnCount(); i++) {
                 config.setProperty("DiskTable_Items(" + i + ")", table.getColumn(table.getColumnOrder()[i]).getData("param"));
                 config.setProperty(table.getColumn(i).getData("param") + "_ColWidth", table.getColumn(i).getWidth());
             }
 
-            sdwin.setStatus("Saving disk window layouts...", 65);
+            if (sdwin != null) {
+                sdwin.setStatus("Saving disk window layouts...", 65);
+            }
 
             for (int i = 0; i < 256; i++) {
-                sdwin.setProgress(65 + (i / 8));
+                if (sdwin != null) {
+                    sdwin.setProgress(65 + (i / 8));
+                }
 
                 if (disks != null) {
                     if ((disks[i] != null) && (disks[i].hasDiskwin())) {
@@ -1867,7 +1911,9 @@ public class MainWin {
                 }
             }
 
-            sdwin.setStatus("Saving library window layouts...", 95);
+            if (sdwin != null) {
+                sdwin.setStatus("Saving library window layouts...", 95);
+            }
 
             int tabs = 0;
 
@@ -1885,20 +1931,24 @@ public class MainWin {
 
         }
 
-        sdwin.setStatus("Exiting...", 100);
+        if (sdwin != null) {
+            sdwin.setStatus("Exiting...", 100);
+        }
 
-        // finish drawing..?
-        int waits = 0;
+        // finish drawing..? (only in SWT mode)
+        if (!isJavaFXMode && display != null) {
+            int waits = 0;
 
-        while (display.readAndDispatch() && waits < 10) {
+            while (display.readAndDispatch() && waits < 10) {
 
-            try {
-                waits++;
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                //dont care, just catching a few redraws
+                try {
+                    waits++;
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    //dont care, just catching a few redraws
+                }
+
             }
-
         }
 
         // do updated file replacement on the way out..
@@ -2261,12 +2311,22 @@ public class MainWin {
     }
 
     private static void updateMidiMenus() {
+        // Check if we're in JavaFX mode - SWT menu items don't exist
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        if (isJavaFXMode) {
+            // In JavaFX mode, MIDI menu updates are handled by MainWindowController
+            // This method is SWT-specific, skip in JavaFX mode
+            return;
+        }
 
         // much more complicated than necessary so that changes are reflected in real time
-        if (MainWin.midiStatus.isEnabled()) {
-            mntmMidi.setEnabled(true);
+        if (MainWin.midiStatus != null && MainWin.midiStatus.isEnabled()) {
+            if (mntmMidi != null) {
+                mntmMidi.setEnabled(true);
+            }
 
             // is menu built ok
+            if (MainWin.menuMIDIProfiles == null) return;
             MenuItem[] profitems = MainWin.menuMIDIProfiles.getItems();
             String[] profiles = MainWin.midiStatus.getProfiles().toArray(new String[0]);
 
@@ -2308,6 +2368,7 @@ public class MainWin {
             }
 
             // same for outputs.. is menu built ok
+            if (MainWin.menuMIDIOutputs == null) return;
             MenuItem[] outitems = MainWin.menuMIDIOutputs.getItems();
             String[] outs = MainWin.midiStatus.getDevices().toArray(new String[0]);
 
@@ -2351,9 +2412,13 @@ public class MainWin {
             }
 
             // voice lock
-            mntmLockInstruments.setSelection(MainWin.midiStatus.isVoiceLock());
+            if (mntmLockInstruments != null) {
+                mntmLockInstruments.setSelection(MainWin.midiStatus.isVoiceLock());
+            }
         } else {
-            mntmMidi.setEnabled(false);
+            if (mntmMidi != null) {
+                mntmMidi.setEnabled(false);
+            }
         }
     }
 
@@ -2379,6 +2444,18 @@ public class MainWin {
     }
 
     public static void refreshDiskTable() {
+        // Check if we're in JavaFX mode - SWT table doesn't exist
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        if (isJavaFXMode) {
+            // In JavaFX mode, disk table updates are handled by MainWindowController
+            // This method is SWT-specific, skip in JavaFX mode
+            return;
+        }
+
+        // SWT mode: refresh table
+        if (MainWin.table == null || MainWin.table.isDisposed()) {
+            return;
+        }
 
         MainWin.table.setRedraw(false);
 
@@ -2399,7 +2476,7 @@ public class MainWin {
 
         }
 
-        if (MainWin.currentDisk >= 0) {
+        if (MainWin.currentDisk >= 0 && MainWin.table != null && !MainWin.table.isDisposed()) {
             table.setSelection(MainWin.currentDisk);
         }
 
@@ -2472,27 +2549,29 @@ public class MainWin {
                 final int diskno = cdw.open();
 
                 if (diskno > -1) {
+                    // Check if we're in JavaFX mode
+                    boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+                    
+                    if (!isJavaFXMode) {
+                        // SWT mode: show dialog
+                        doDisplayExec(new Runnable() {
+                            public void run() {
+                                List<String> cmds = new ArrayList<String>();
+                                cmds.add("dw disk insert " + diskno + " " + path);
 
-                    display.syncExec(
-                            new Runnable() {
-                        public void run() {
+                                SendCommandWin win = new SendCommandWin(theshell, SWT.DIALOG_TRIM, cmds, "Inserting disk image...", "Please wait while the image is inserted into drive " + diskno + ".");
 
-                            List<String> cmds = new ArrayList<String>();
-                            cmds.add("dw disk insert " + diskno + " " + path);
-
-                            SendCommandWin win = new SendCommandWin(theshell, SWT.DIALOG_TRIM, cmds, "Inserting disk image...", "Please wait while the image is inserted into drive " + diskno + ".");
-
-                            win.open();
-
-                        }
-                    });
-
+                                win.open();
+                            }
+                        }, true);
+                    }
+                    // In JavaFX mode, disk insertion is handled directly without dialog
                 }
 
             }
         });
 
-        display.asyncExec(t);
+        doDisplayExec(t, false);
 
     }
 
@@ -2549,7 +2628,7 @@ public class MainWin {
         } else {
             LocalFileBrowser lfb = new LocalFileBrowser(shell, save, dir, startpath, title, buttontext, fileext);
 
-            display.syncExec(lfb);
+            doDisplayExec(lfb, true);
 
             return (lfb.getSelected());
 
@@ -2566,7 +2645,12 @@ public class MainWin {
     }
 
     protected static void sendCommand(String cmd, boolean markComplete) {
-        int tid = MainWin.taskman.addTask(cmd);
+        int tid = 0;
+        if (MainWin.taskman != null) {
+            tid = MainWin.taskman.addTask(cmd);
+        } else {
+            logger.info("Command (no taskman): " + cmd);
+        }
         sendCommand(cmd, tid, markComplete);
     }
 
@@ -2579,7 +2663,9 @@ public class MainWin {
                     processClientCmd(cmd, tid, markComplete);
                 } else {
                     if (markComplete) {
-                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, "Connecting to server...");
+                        if (MainWin.taskman != null) {
+                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, "Connecting to server...");
+                        }
                     }
 
                     Connection connection = new Connection(host, port, instance);
@@ -2588,20 +2674,28 @@ public class MainWin {
                         connection.Connect();
 
                         if (markComplete) {
-                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, "Sending command: " + cmd);
+                            if (MainWin.taskman != null) {
+                                MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, "Sending command: " + cmd);
+                            }
                         }
 
                         connection.sendCommand(tid, cmd, instance, markComplete);
                         connection.close();
 
                     } catch (UnknownHostException e) {
-                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e.getMessage() + " You may have a DNS problem, or the server hostname may not be specified correctly.");
+                        if (MainWin.taskman != null) {
+                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e.getMessage() + " You may have a DNS problem, or the server hostname may not be specified correctly.");
+                        }
                     } catch (IOException e1) {
                         // UIUtils.getStackTrace(e1)
-                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e1.getMessage() + " You may have a connectivity problem, or the server may not be running.");
+                        if (MainWin.taskman != null) {
+                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e1.getMessage() + " You may have a connectivity problem, or the server may not be running.");
+                        }
 
                     } catch (DWUIOperationFailedException e2) {
-                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e2.getMessage());
+                        if (MainWin.taskman != null) {
+                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e2.getMessage());
+                        }
                     }
                 }
             }
@@ -2612,13 +2706,19 @@ public class MainWin {
     }
 
     public static void processClientCmd(String cmd) {
-        int tid = MainWin.taskman.addTask(cmd);
-
+        int tid = 0;
+        if (MainWin.taskman != null) {
+            tid = MainWin.taskman.addTask(cmd);
+        } else {
+            logger.info("Client command (no taskman): " + cmd);
+        }
         processClientCmd(cmd, tid, true);
     }
 
     public static void processClientCmd(String cmd, final int tid, boolean markComplete) {
-        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, null);
+        if (MainWin.taskman != null) {
+            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, null);
+        }
 
         final int statint;
 
@@ -2629,54 +2729,56 @@ public class MainWin {
         }
 
         if (cmd.equals("/fonts")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
-                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, UIUtils.listFonts());
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, UIUtils.listFonts());
+                    }
                 }
-            });
+            }, false);
         } else if (cmd.equals("/splash")) {
-            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, MainWin.DWUIVersion + " (" + MainWin.DWUIVersionDate + ")");
+            if (MainWin.taskman != null) {
+                MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, MainWin.DWUIVersion + " (" + MainWin.DWUIVersionDate + ")");
+            }
 
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
                     MainWin.doSplashTimers(tid, true);
                 }
-            });
+            }, false);
         } else if (cmd.equals("/sha")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
                     String txt = UIUtils.getSHAForDir(".", ".");
 
-                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, txt);
-
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, txt);
+                    }
                 }
-            });
+            }, false);
 
         } else if (cmd.equals("/forceupdate")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
                     doUpdateCheck(true);
 
-                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, "Forced update complete");
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, "Forced update complete");
+                    }
                 }
-            });
+            }, false);
 
         } else if (cmd.equals("/verify")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
-
-                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, doVerifyVersion());
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, doVerifyVersion());
+                    }
                 }
-            });
+            }, false);
 
         } else if (cmd.equals("/mem")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
                     String txt = "Max  : " + (Runtime.getRuntime().maxMemory() / 1024)
                             + System.getProperty("line.separator") + "Total: " + (Runtime.getRuntime().totalMemory() / 1024)
@@ -2686,33 +2788,37 @@ public class MainWin {
                     txt += System.getProperty("line.separator") + "TFree: " + (realfree / 1024);
                     txt += "     " + ((Double.valueOf(realfree) / Double.valueOf(Runtime.getRuntime().maxMemory()) * 100) + "%");
 
-                    MainWin.taskman.updateTask(tid, statint, txt);
-
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, statint, txt);
+                    }
                 }
-            });
+            }, false);
         } else if (cmd.equals("/dumperr")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
-                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, MainWin.errorHelpCache.dump());
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, MainWin.errorHelpCache.dump());
+                    }
                 }
-            });
+            }, false);
         } else if (cmd.equals("/midistatus")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
-                    MainWin.taskman.updateTask(tid, statint, UIUtils.dumpMIDIStatus(MainWin.midiStatus));
+                    if (MainWin.taskman != null) {
+                        MainWin.taskman.updateTask(tid, statint, UIUtils.dumpMIDIStatus(MainWin.midiStatus));
+                    }
                 }
-            });
+            }, false);
         } else if (cmd.equals("/bugout")) {
-            display.asyncExec(
-                    new Runnable() {
+            doDisplayExec(new Runnable() {
                 public void run() {
                     Integer.parseInt("not an int");
                 }
-            });
+            }, false);
         } else {
-            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, "Unknown client command");
+            if (MainWin.taskman != null) {
+                MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, "Unknown client command");
+            }
         }
 
     }
@@ -2832,20 +2938,49 @@ public class MainWin {
 
             synchronized (connected) {
                 if (!connected) {
-                    display.syncExec(
-                            new Runnable() {
-                        public void run() {
+                    // Check if we're in JavaFX mode
+                    boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+                    
+                    if (isJavaFXMode) {
+                        // Use JavaFX Platform.runLater()
+                        try {
+                            Class<?> platformClass = Class.forName("javafx.application.Platform");
+                            java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                            runLaterMethod.invoke(null, (Runnable)() -> {
+                                MainWin.connected = true;
+                                MainWin.setItemsConnectionEnabled(true);
+                                
+                                // Update JavaFX UI if controller is available
+                                if (mainWindowController != null) {
+                                    try {
+                                        java.lang.reflect.Method updateStatusMethod = mainWindowController.getClass().getMethod("updateConnectionStatus", boolean.class);
+                                        updateStatusMethod.invoke(mainWindowController, true);
+                                    } catch (Exception e) {
+                                        // Ignore if method doesn't exist
+                                    }
+                                }
+                            });
+                        } catch (Exception e) {
+                            System.err.println("Error using Platform.runLater in setConStatusConnect: " + e.getMessage());
+                            // Fallback: set directly
                             MainWin.connected = true;
-                            /*
-							 MainWin.lblConStatus.setRedraw(false);
-							 MainWin.lblConStatus.setImage(org.eclipse.wb.swt.SWTResourceManager.getImage(MainWin.class, "/constatus/network-transmit-2.png"));
-							 MainWin.lblConStatus.setRedraw(true);
-                             */
-
                             MainWin.setItemsConnectionEnabled(true);
-
                         }
-                    });
+                    } else {
+                        // Use SWT display.syncExec() or JavaFX Platform.runLater()
+                        doDisplayExec(new Runnable() {
+                            public void run() {
+                                MainWin.connected = true;
+                                /*
+                                 MainWin.lblConStatus.setRedraw(false);
+                                 MainWin.lblConStatus.setImage(org.eclipse.wb.swt.SWTResourceManager.getImage(MainWin.class, "/constatus/network-transmit-2.png"));
+                                 MainWin.lblConStatus.setRedraw(true);
+                                 */
+
+                                MainWin.setItemsConnectionEnabled(true);
+                            }
+                        }, false);
+                    }
                 }
             }
         }
@@ -2854,27 +2989,58 @@ public class MainWin {
 
     protected static void setItemsConnectionEnabled(boolean en) {
         // enable/disable all controls requiring a server connection
+        
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        if (isJavaFXMode) {
+            // In JavaFX mode, menu items are managed by MainWindowController
+            // We can update them via reflection if needed
+            if (mainWindowController != null) {
+                try {
+                    java.lang.reflect.Method updateMenuStatesMethod = mainWindowController.getClass().getMethod("updateMenuStates");
+                    updateMenuStatesMethod.invoke(mainWindowController);
+                } catch (Exception e) {
+                    // Ignore if method doesn't exist or fails
+                }
+            }
+            // Note: JavaFX controls are enabled/disabled via the controller
+            // The disk table and command input are managed by MainWindowController
+        } else {
+            // SWT mode - update SWT controls
+            if (MainWin.menu_tools != null) {
+                MenuItem[] items = MainWin.menu_tools.getItems();
+                for (int i = 0; i < items.length; i++) {
+                    items[i].setEnabled(en);
+                }
+            }
 
-        MenuItem[] items = MainWin.menu_tools.getItems();
+            if (MainWin.menu_config != null) {
+                MenuItem[] items = MainWin.menu_config.getItems();
+                for (int i = 0; i < items.length; i++) {
+                    items[i].setEnabled(en);
+                }
+            }
 
-        for (int i = 0; i < items.length; i++) {
-            items[i].setEnabled(en);
+            if (mntmInstances != null) {
+                mntmInstances.setEnabled(en);
+            }
+
+            if (MainWin.table != null) {
+                MainWin.table.setEnabled(en);
+            }
+            if (MainWin.txtYouCanEnter != null) {
+                MainWin.txtYouCanEnter.setEnabled(en);
+            }
+
+            // stuff that stays enabled
+            if (MainWin.mntmInitialConfig != null) {
+                MainWin.mntmInitialConfig.setEnabled(true);
+            }
+            if (MainWin.mntmUserInterface != null) {
+                MainWin.mntmUserInterface.setEnabled(true);
+            }
         }
-
-        items = MainWin.menu_config.getItems();
-
-        for (int i = 0; i < items.length; i++) {
-            items[i].setEnabled(en);
-        }
-
-        mntmInstances.setEnabled(en);
-
-        MainWin.table.setEnabled(en);
-        MainWin.txtYouCanEnter.setEnabled(en);
-
-        // stuff that stays enabled
-        MainWin.mntmInitialConfig.setEnabled(true);
-        MainWin.mntmUserInterface.setEnabled(true);
 
     }
 
@@ -2927,7 +3093,63 @@ public class MainWin {
     }
 
     public static void doDisplayAsync(Runnable runnable) {
-        display.asyncExec(runnable);
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        if (isJavaFXMode) {
+            // Use JavaFX Platform.runLater()
+            try {
+                Class<?> platformClass = Class.forName("javafx.application.Platform");
+                java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                runLaterMethod.invoke(null, runnable);
+            } catch (Exception e) {
+                System.err.println("Error using Platform.runLater in doDisplayAsync: " + e.getMessage());
+                // Fallback: run directly
+                runnable.run();
+            }
+        } else {
+            // Use SWT display.asyncExec()
+            if (display != null) {
+                display.asyncExec(runnable);
+            } else {
+                // Display is null, run directly
+                runnable.run();
+            }
+        }
+    }
+    
+    /**
+     * Helper method to execute code on the UI thread (replaces Display.syncExec/asyncExec).
+     * Uses Platform.runLater() in JavaFX mode, Display.asyncExec() in SWT mode.
+     */
+    private static void doDisplayExec(Runnable runnable, boolean sync) {
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        if (isJavaFXMode) {
+            // Use JavaFX Platform.runLater() (async only, no sync equivalent)
+            try {
+                Class<?> platformClass = Class.forName("javafx.application.Platform");
+                java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                runLaterMethod.invoke(null, runnable);
+            } catch (Exception e) {
+                System.err.println("Error using Platform.runLater: " + e.getMessage());
+                // Fallback: run directly
+                runnable.run();
+            }
+        } else {
+            // Use SWT display.syncExec() or display.asyncExec()
+            if (display != null && !display.isDisposed()) {
+                if (sync) {
+                    display.syncExec(runnable);
+                } else {
+                    display.asyncExec(runnable);
+                }
+            } else {
+                // Display is null or disposed, run directly
+                runnable.run();
+            }
+        }
     }
 
     protected CTabFolder getTabFolderOutput() {
@@ -2949,40 +3171,96 @@ public class MainWin {
     }
 
     public static void restartServerConn() {
+        System.out.println("=== restartServerConn() called ===");
+        System.err.println("=== restartServerConn() called ===");
         //logger.warn("Restarting server connection..");
         if (syncObj != null) {
+            System.out.println("Stopping existing SyncThread...");
+            System.err.println("Stopping existing SyncThread...");
             MainWin.syncObj.die();
             syncThread.interrupt();
 
             try {
                 syncThread.join();
+                System.out.println("Existing SyncThread stopped");
+                System.err.println("Existing SyncThread stopped");
             } catch (InterruptedException e) {
+                System.err.println("Error stopping SyncThread: " + e.getMessage());
             }
         }
 
-        if (MainWin.table != null) {
-            MainWin.table.removeAll();
+        // Only clear SWT table if we're in SWT mode (not JavaFX mode)
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        if (!isJavaFXMode && MainWin.table != null) {
+            try {
+                MainWin.table.removeAll();
+            } catch (Exception e) {
+                // Ignore if table is disposed or not available
+            }
         }
+        // In JavaFX mode, the disk table will be updated via MainWindowController
 
         // start threads that talk with server
+        System.out.println("=== Creating new SyncThread ===");
+        System.err.println("=== Creating new SyncThread ===");
+        System.out.println("=== Host: " + MainWin.getHost() + ", Port: " + MainWin.getPort() + ", Instance: " + MainWin.getInstance() + " ===");
+        System.err.println("=== Host: " + MainWin.getHost() + ", Port: " + MainWin.getPort() + ", Instance: " + MainWin.getInstance() + " ===");
         syncObj = new SyncThread();
         syncThread = new Thread(syncObj);
         syncThread.setDaemon(true);
+        syncThread.setName("SyncThread");
+        System.out.println("=== Starting SyncThread ===");
+        System.err.println("=== Starting SyncThread ===");
         syncThread.start();
+        System.out.println("=== SyncThread started (thread name: " + syncThread.getName() + ", isAlive: " + syncThread.isAlive() + ") ===");
+        System.err.println("=== SyncThread started (thread name: " + syncThread.getName() + ", isAlive: " + syncThread.isAlive() + ") ===");
+        
+        // Give it a moment to start
+        try {
+            Thread.sleep(500);
+            System.out.println("=== SyncThread status after 500ms: isAlive=" + syncThread.isAlive() + ", state=" + syncThread.getState() + " ===");
+            System.err.println("=== SyncThread status after 500ms: isAlive=" + syncThread.isAlive() + ", state=" + syncThread.getState() + " ===");
+        } catch (InterruptedException e) {
+            // Ignore
+        }
 
         MainWin.serverLocal = UIUtils.isServerLocal();
 
     }
 
     public static void applyDisks() {
-        display.asyncExec(
-                new Runnable() {
-            public void run() {
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        if (isJavaFXMode) {
+            // Use JavaFX Platform.runLater() for JavaFX mode
+            try {
+                Class<?> platformClass = Class.forName("javafx.application.Platform");
+                java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                runLaterMethod.invoke(null, new Runnable() {
+                    public void run() {
+                        refreshDiskTable();
+                    }
+                });
+            } catch (Exception e) {
+                // Fallback: call directly if Platform.runLater fails
                 refreshDiskTable();
-
             }
-        });
+        } else {
+            // Use SWT display.asyncExec() for SWT mode
+            if (display != null) {
+                display.asyncExec(
+                        new Runnable() {
+                    public void run() {
+                        refreshDiskTable();
 
+                    }
+                });
+            } else {
+                // Display is null, call directly
+                refreshDiskTable();
+            }
+        }
     }
 
     public static DiskDef getCurrentDisk() {
@@ -3003,14 +3281,40 @@ public class MainWin {
     }
 
     public static void applyMIDIStatus() {
-        display.asyncExec(
-                new Runnable() {
-            public void run() {
-                // midi menus
+        // Check if we're in JavaFX mode
+        boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+        
+        if (isJavaFXMode) {
+            // Use JavaFX Platform.runLater() for JavaFX mode
+            try {
+                Class<?> platformClass = Class.forName("javafx.application.Platform");
+                java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                runLaterMethod.invoke(null, new Runnable() {
+                    public void run() {
+                        // midi menus
+                        updateMidiMenus();
+                    }
+                });
+            } catch (Exception e) {
+                // Fallback: call directly if Platform.runLater fails
                 updateMidiMenus();
-
             }
-        });
+        } else {
+            // Use SWT display.asyncExec() for SWT mode
+            if (display != null) {
+                display.asyncExec(
+                        new Runnable() {
+                    public void run() {
+                        // midi menus
+                        updateMidiMenus();
+
+                    }
+                });
+            } else {
+                // Display is null, call directly
+                updateMidiMenus();
+            }
+        }
     }
 
     public static MIDIStatus getMidiStatus() {
@@ -3035,6 +3339,7 @@ public class MainWin {
     }
 
     public static void submitDiskEvent(final int disk, final String key, final String val) {
+        System.out.println("submitDiskEvent: disk=" + disk + ", key=" + key + ", val=" + val);
 
         // local display items
         if (disks[disk] == null) {
@@ -3046,96 +3351,131 @@ public class MainWin {
 
         if (key.startsWith("*")) {
             if (key.equals("*insert")) {
+                System.out.println("Disk insert event for disk " + disk + ": " + val);
                 clearDiskTableEntry(disk);
 
                 setDiskTableEntryFile(disk, val);
 
             } else if (key.equals("*eject")) {
+                System.out.println("Disk eject event for disk " + disk);
                 clearDiskTableEntry(disk);
             }
         }
 
-        // update disk table 
-        MainWin.diskTableUpdater.addUpdate(disk, key, val);
+        // update disk table - this is the main update path
+        if (MainWin.diskTableUpdater != null) {
+            MainWin.diskTableUpdater.addUpdate(disk, key, val);
+            System.out.println("Added update to diskTableUpdater: disk=" + disk + ", key=" + key);
+        } else {
+            System.err.println("ERROR: diskTableUpdater is null! Cannot update disk table.");
+        }
 
         if (key.equals("_reads") && !val.equals("0")) {
-            MainWin.diskTableUpdater.addUpdate(disk, "LED", MainWin.diskLEDgreen);
+            // LED state: 1 = green
+            if (MainWin.diskTableUpdater != null) {
+                MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(1));
+            }
             MainWin.driveactivity = true;
         } else if (key.equals("_writes") && !val.equals("0")) {
-            MainWin.diskTableUpdater.addUpdate(disk, "LED", MainWin.diskLEDred);
+            // LED state: 2 = red
+            if (MainWin.diskTableUpdater != null) {
+                MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(2));
+            }
             MainWin.driveactivity = true;
+        } else if (key.equals("*insert") || key.equals("*eject")) {
+            // Reset LED to dark (0) when disk is inserted or ejected
+            if (MainWin.diskTableUpdater != null) {
+                MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(0));
+            }
         }
 
     }
 
     private static void setDiskTableEntryFile(final int disk, final String val) {
-        // sync?
-        display.syncExec(new Runnable() {
+        // Use helper method for thread-safe UI updates
+        doDisplayExec(new Runnable() {
             public void run() {
-
-                // set file
-                int filecol = MainWin.getTPIndex("File");
-                if (filecol > -1) {
-                    table.getItem(disk).setText(filecol, UIUtils.getFilenameFromURI(val));
+                // Check if we're in JavaFX mode - this method is SWT-specific
+                boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+                if (isJavaFXMode) {
+                    // In JavaFX mode, disk table updates are handled by MainWindowController
+                    // via updateDiskTableItem() which is called from SyncThread
+                    return;
                 }
 
-                // set location
-                int loccol = MainWin.getTPIndex("Location");
-                if (loccol > -1) {
-                    table.getItem(disk).setText(loccol, UIUtils.getLocationFromURI(val));
-                }
+                // SWT mode: update table directly
+                if (table != null && !table.isDisposed() && table.getItemCount() > disk) {
+                    // set file
+                    int filecol = MainWin.getTPIndex("File");
+                    if (filecol > -1) {
+                        table.getItem(disk).setText(filecol, UIUtils.getFilenameFromURI(val));
+                    }
 
-                int ledcol = MainWin.getTPIndex("LED");
-                if (ledcol > -1) {
-                    table.getItem(disk).setImage(ledcol, MainWin.diskLEDdark);
-                }
+                    // set location
+                    int loccol = MainWin.getTPIndex("Location");
+                    if (loccol > -1) {
+                        table.getItem(disk).setText(loccol, UIUtils.getLocationFromURI(val));
+                    }
 
+                    int ledcol = MainWin.getTPIndex("LED");
+                    if (ledcol > -1) {
+                        table.getItem(disk).setImage(ledcol, MainWin.diskLEDdark);
+                    }
+                }
             }
-        });
-
+        }, false); // Use async for better performance
     }
 
     private static void clearDiskTableEntry(final int disk) {
-
-        // sync?
-        display.syncExec(new Runnable() {
+        // Use helper method for thread-safe UI updates
+        doDisplayExec(new Runnable() {
             public void run() {
-                synchronized (table) {
-                    int drivecol = MainWin.getTPIndex("Drive");
-                    int ledcol = MainWin.getTPIndex("LED");
-
-                    String[] txt = new String[table.getColumnCount()];
-                    for (int i = 0; i < txt.length; i++) {
-                        txt[i] = "";
-                    }
-
-                    // make sure it exists
-                    while (table.getItemCount() < (disk + 1)) {
-                        TableItem item = new TableItem(table, SWT.NONE);
-
-                        if (drivecol > -1) {
-                            item.setText(drivecol, disk + "");
-                        }
-                    }
-
-                    // clear all txt
-                    table.getItem(disk).setText(txt);
-
-                    // set Drive #
-                    if (drivecol > -1) {
-                        table.getItem(disk).setText(drivecol, disk + "");
-                    }
-
-                    // clear image
-                    if (ledcol > -1) {
-                        table.getItem(disk).setImage(ledcol, null);
-                    }
-
+                // Check if we're in JavaFX mode - this method is SWT-specific
+                boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+                if (isJavaFXMode) {
+                    // In JavaFX mode, disk table updates are handled by MainWindowController
+                    // This method is SWT-specific, skip in JavaFX mode
+                    return;
                 }
 
-            }
-        });
+                // SWT mode: update table directly
+                if (table != null && !table.isDisposed()) {
+                    synchronized (table) {
+                        int drivecol = MainWin.getTPIndex("Drive");
+                        int ledcol = MainWin.getTPIndex("LED");
 
+                        String[] txt = new String[table.getColumnCount()];
+                        for (int i = 0; i < txt.length; i++) {
+                            txt[i] = "";
+                        }
+
+                        // make sure it exists
+                        while (table.getItemCount() < (disk + 1)) {
+                            TableItem item = new TableItem(table, SWT.NONE);
+
+                            if (drivecol > -1) {
+                                item.setText(drivecol, disk + "");
+                            }
+                        }
+
+                        // clear all txt
+                        if (table.getItemCount() > disk) {
+                            table.getItem(disk).setText(txt);
+
+                            // set Drive #
+                            if (drivecol > -1) {
+                                table.getItem(disk).setText(drivecol, disk + "");
+                            }
+
+                            // clear image
+                            if (ledcol > -1) {
+                                table.getItem(disk).setImage(ledcol, null);
+                            }
+                        }
+                    }
+                }
+            }
+        }, false); // Use async for better performance
     }
 
     public static String getServerText() {
@@ -3151,15 +3491,48 @@ public class MainWin {
     public static boolean isReady() {
         return MainWin.ready;
     }
+    
+    public static void setReady(boolean ready) {
+        MainWin.ready = ready;
+    }
 
     public static void updateDiskTableItem(final int item, final String key, final Object object) {
-
-        if (disks[item].isLoaded() && (display != null) && !display.isDisposed()) {
+        // Don't check if disk is loaded - we need to update even for new inserts
+        // The disk might not be marked as loaded yet when *insert event arrives
+        
+        // Try JavaFX first if MainWindowController is available (using reflection to avoid compile dependency)
+        if (mainWindowController != null) {
+            try {
+                Class<?> platformUtilsClass = Class.forName("com.groupunix.drivewireui.PlatformUtils");
+                java.lang.reflect.Method runMethod = platformUtilsClass.getMethod("runOnFXThreadAsync", Runnable.class);
+                final int finalItem = item;
+                final String finalKey = key;
+                final Object finalObject = object;
+                runMethod.invoke(null, (Runnable)() -> {
+                    try {
+                        java.lang.reflect.Method updateMethod = mainWindowController.getClass().getMethod("updateDiskTableEntry", int.class, String.class, Object.class);
+                        updateMethod.invoke(mainWindowController, finalItem, finalKey, finalObject);
+                    } catch (Exception e) {
+                        System.err.println("Error calling updateDiskTableEntry via reflection: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                });
+                return;
+            } catch (Exception e) {
+                System.err.println("Error accessing PlatformUtils: " + e.getMessage());
+                // JavaFX classes not available, fall through to SWT
+            }
+        }
+        
+        // Fallback to SWT if display is available
+        if (display != null && !display.isDisposed() && table != null) {
             display.syncExec(new Runnable() {
                 public void run() {
+                    if (table.isDisposed()) return;
+                    
                     int keycol = MainWin.getTPIndex(key);
 
-                    if (keycol > -1) {
+                    if (keycol > -1 && table.getItemCount() > item) {
                         if (object.getClass().getSimpleName().equals("String")) {
                             table.getItem(item).setText(keycol, object.toString());
                         } else if (object.getClass().getSimpleName().equals("Image")) {
@@ -3173,18 +3546,29 @@ public class MainWin {
     }
 
     public static void updateDiskTabs() {
-        display.syncExec(new Runnable() {
+        // Use helper method for thread-safe UI updates
+        doDisplayExec(new Runnable() {
             public void run() {
-                for (Control cti : MainWin.tabFolderOutput.getTabList()) {
-                    if ((cti.getClass().getCanonicalName().equals("com.groupunix.drivewireui.DWLibrary"))) {
-                        if (!((DWLibrary) cti).getOurTab().isDisposed()) {
+                // Check if we're in JavaFX mode - this method is SWT-specific
+                boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+                if (isJavaFXMode) {
+                    // In JavaFX mode, tabs are handled by JavaFX TabPane
+                    // This method is SWT-specific, skip in JavaFX mode
+                    return;
+                }
 
-                            ((DWLibrary) cti).updateTree();
+                // SWT mode: update tabs
+                if (MainWin.tabFolderOutput != null && !MainWin.tabFolderOutput.isDisposed()) {
+                    for (Control cti : MainWin.tabFolderOutput.getTabList()) {
+                        if ((cti.getClass().getCanonicalName().equals("com.groupunix.drivewireui.DWLibrary"))) {
+                            if (!((DWLibrary) cti).getOurTab().isDisposed()) {
+                                ((DWLibrary) cti).updateTree();
+                            }
                         }
                     }
                 }
             }
-        });
+        }, false); // Use async for better performance
     }
 
     public static Display getDisplay() {
@@ -3249,16 +3633,27 @@ public class MainWin {
     public static void showError(final DWError dwerror) {
 
         if (dwerror.isGui()) {
-            display.asyncExec(
-                    new Runnable() {
-                public void run() {
-                    ErrorWin ew = new ErrorWin(shell, SWT.DIALOG_TRIM, dwerror);
-                    ew.open();
+            // Use JavaFX error dialog if available, otherwise fall back to SWT
+            try {
+                ErrorDialogFX.showError(dwerror, null);
+            } catch (Exception e) {
+                // Fallback to SWT if JavaFX not available
+                if (display != null && !display.isDisposed()) {
+                    display.asyncExec(
+                            new Runnable() {
+                        public void run() {
+                            ErrorWin ew = new ErrorWin(shell, SWT.DIALOG_TRIM, dwerror);
+                            ew.open();
+                        }
+                    });
                 }
-            });
+            }
 
         } else {
-            int tid = MainWin.taskman.addTask("Error");
+            int tid = 0;
+        if (MainWin.taskman != null) {
+            tid = MainWin.taskman.addTask("Error");
+        }
 
             MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, dwerror.getTextError());
         }
@@ -3266,36 +3661,71 @@ public class MainWin {
 
     public static void addToServerLog(final LogItem litem) {
         if (!MainWin.lowMem || litem.isImportant()) {
-            display.asyncExec(
-                    new Runnable() {
-                public void run() {
-                    int lisize;
-
+            // Check if we're in JavaFX mode
+            boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+            
+            if (isJavaFXMode) {
+                // Use JavaFX Platform.runLater() for JavaFX mode
+                try {
+                    Class<?> platformClass = Class.forName("javafx.application.Platform");
+                    java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                    runLaterMethod.invoke(null, new Runnable() {
+                        public void run() {
+                            synchronized (logItems) {
+                                MainWin.logItems.add(litem);
+                            }
+                            // TODO: Update JavaFX log table when implemented
+                            // For now, just add to logItems list
+                        }
+                    });
+                } catch (Exception e) {
+                    // Fallback: add directly to logItems
                     synchronized (logItems) {
                         MainWin.logItems.add(litem);
-                        lisize = MainWin.logItems.size();
                     }
+                }
+            } else {
+                // Use SWT display.asyncExec() for SWT mode
+                if (display != null) {
+                    display.asyncExec(
+                            new Runnable() {
+                        public void run() {
+                            int lisize;
 
-                    logTable.setItemCount(lisize);
+                            synchronized (logItems) {
+                                MainWin.logItems.add(litem);
+                                lisize = MainWin.logItems.size();
+                            }
 
-                    if (MainWin.logscroll) {
-                        logTable.setTopIndex(lisize);
-                    }
+                            if (logTable != null) {
+                                logTable.setItemCount(lisize);
 
-                    if (MainWin.tabFolderOutput.getSelectionIndex() != 1) {
-                        if (UIUtils.getLogLevelVal(litem.getLevel()) > MainWin.logNoticeLevel) {
-                            for (CTabItem ti : MainWin.tabFolderOutput.getItems()) {
-                                if ((ti.getData("ttype") != null) && (ti.getData("ttype").equals("ui"))) {
-                                    MainWin.tabFolderOutput.getItems()[1].setImage(org.eclipse.wb.swt.SWTResourceManager.getImage(MainWin.class, "/logging/" + litem.getLevel().toLowerCase() + ".png"));
+                                if (MainWin.logscroll) {
+                                    logTable.setTopIndex(lisize);
                                 }
                             }
 
-                            MainWin.logNoticeLevel = UIUtils.getLogLevelVal(litem.getLevel());
-                        }
-                    }
+                            if (MainWin.tabFolderOutput != null && MainWin.tabFolderOutput.getSelectionIndex() != 1) {
+                                if (UIUtils.getLogLevelVal(litem.getLevel()) > MainWin.logNoticeLevel) {
+                                    for (CTabItem ti : MainWin.tabFolderOutput.getItems()) {
+                                        if ((ti.getData("ttype") != null) && (ti.getData("ttype").equals("ui"))) {
+                                            MainWin.tabFolderOutput.getItems()[1].setImage(org.eclipse.wb.swt.SWTResourceManager.getImage(MainWin.class, "/logging/" + litem.getLevel().toLowerCase() + ".png"));
+                                        }
+                                    }
 
+                                    MainWin.logNoticeLevel = UIUtils.getLogLevelVal(litem.getLevel());
+                                }
+                            }
+
+                        }
+                    });
+                } else {
+                    // Display is null, add directly to logItems
+                    synchronized (logItems) {
+                        MainWin.logItems.add(litem);
+                    }
                 }
-            });
+            }
         }
     }
 

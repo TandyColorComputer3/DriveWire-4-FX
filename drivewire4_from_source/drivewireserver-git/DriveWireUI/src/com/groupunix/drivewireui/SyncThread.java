@@ -33,31 +33,62 @@ public class SyncThread implements Runnable
 	public void run() 
 	{
 		Thread.currentThread().setName("dwuiSync-" + Thread.currentThread().getId());
+		System.out.println("=== SyncThread.run() STARTED ===");
+		System.err.println("=== SyncThread.run() STARTED ===");
 		
 		char[] cbuf = new char[READ_BUFFER_SIZE];
 		
 		// initial sleep
-		while (!MainWin.isReady())
+		System.out.println("=== SyncThread: Waiting for MainWin to be ready... (ready=" + MainWin.isReady() + ") ===");
+		System.err.println("=== SyncThread: Waiting for MainWin to be ready... (ready=" + MainWin.isReady() + ") ===");
+		int waitCount = 0;
+		while (!MainWin.isReady() && !wanttodie)
 		{
 			// let GUI open up..
 			try
 			{
-				//System.out.println("sleep");
 				Thread.sleep(100);
+				waitCount++;
+				if (waitCount % 10 == 0) {
+					System.out.println("SyncThread: Still waiting... (ready=" + MainWin.isReady() + ", count=" + waitCount + ")");
+				}
 			} 
 			catch (InterruptedException e)
 			{
+				System.err.println("SyncThread: Interrupted while waiting");
 				wanttodie = true;
 			}
 		}
+		if (wanttodie) {
+			System.out.println("=== SyncThread: Dying before main loop ===");
+			System.err.println("=== SyncThread: Dying before main loop ===");
+			return;
+		}
+		System.out.println("=== SyncThread: MainWin is ready, starting main loop... ===");
+		System.err.println("=== SyncThread: MainWin is ready, starting main loop... ===");
 		
 		while (!wanttodie)
 		{
 			
 			// change/establish connection
-			if (!wanttodie && !(MainWin.getHost() == null) && !this.host.equals(MainWin.getHost()) || !(this.port == MainWin.getPort()) || (this.sock == null))		
+			String currentHost = MainWin.getHost();
+			int currentPort = MainWin.getPort();
+			
+			// Check if we need to connect/reconnect
+			// Need connection if: host is null, host changed, port changed, or socket is null
+			boolean needConnection = (currentHost == null) || 
+			                        (this.host == null) ||
+			                        !currentHost.equals(this.host) || 
+			                        (currentPort != this.port) || 
+			                        (this.sock == null);
+			
+			System.out.println("SyncThread: Connection check - currentHost=" + currentHost + ", this.host=" + this.host + ", currentPort=" + currentPort + ", this.port=" + this.port + ", sock=" + (this.sock == null ? "null" : "connected") + ", needConnection=" + needConnection);
+			System.err.println("SyncThread: Connection check - currentHost=" + currentHost + ", this.host=" + this.host + ", currentPort=" + currentPort + ", this.port=" + this.port + ", sock=" + (this.sock == null ? "null" : "connected") + ", needConnection=" + needConnection);
+			
+			if (!wanttodie && needConnection)
 			{
-				
+				System.out.println("SyncThread: Entering connection block");
+				System.err.println("SyncThread: Entering connection block");
 				
 				if (!(sock == null))
 				{
@@ -74,10 +105,28 @@ public class SyncThread implements Runnable
 				
 				this.host = MainWin.getHost();
 				this.port = MainWin.getPort();
+				System.out.println("SyncThread: Set host=" + this.host + ", port=" + this.port);
+				System.err.println("SyncThread: Set host=" + this.host + ", port=" + this.port);
+				System.out.flush();
+				System.err.flush();
 								
 				try 
 				{
+					System.out.println("=== SyncThread: STARTING TRY BLOCK ===");
+					System.err.println("=== SyncThread: STARTING TRY BLOCK ===");
+					System.out.flush();
+					System.err.flush();
+					
+					System.out.println("SyncThread: About to call setConStatusTrying()");
+					System.err.println("SyncThread: About to call setConStatusTrying()");
+					System.out.flush();
+					System.err.flush();
 					MainWin.setConStatusTrying();
+					System.out.println("SyncThread: setConStatusTrying() completed");
+					System.err.println("SyncThread: setConStatusTrying() completed");
+					System.out.flush();
+					System.err.flush();
+					
 					// TODO MainWin.addToDisplay("Sync: Connecting to server..");
 					MainWin.debug("Sync: Connecting...");
 					
@@ -85,66 +134,107 @@ public class SyncThread implements Runnable
 				    // get initial state 
 				    
 				    // cache error meanings
+					System.out.println("SyncThread: Loading error help cache...");
 					try
 					{
 						MainWin.errorHelpCache.load();
+						System.out.println("SyncThread: Error help cache loaded");
 					}
 					catch (DWUIOperationFailedException e)
 					{
 						// don't care
+						System.out.println("SyncThread: Error help cache load failed (non-fatal): " + e.getMessage());
 						MainWin.debug("Sync: caching error descriptions failed");
 					}
 				    
 				    
 				    
-				    // load full config - required
-				    MainWin.setServerConfig(UIUtils.getServerConfig());
-				  
+				    // Connect FIRST, then load config
+				    System.out.println("SyncThread: About to create Socket to " + host + ":" + port);
+				    System.err.println("SyncThread: About to create Socket to " + host + ":" + port);
+				    System.out.flush();
+				    System.err.flush();
+				    sock = new Socket(host, port);
+				    System.out.println("SyncThread: Socket created successfully");
+				    System.err.println("SyncThread: Socket created successfully");
+				    System.out.flush();
+				    System.err.flush();
 				    
-				    // optional depending on instance capabilities
-				    // load all disk info
+					// Set up input/output streams FIRST
+					this.out = sock.getOutputStream();
+				    this.in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
+				    
+				    // Send sync command immediately to start the sync feed
+				    System.out.println("SyncThread: Sending 'ui sync' command for instance " + MainWin.getInstance());
+				    System.err.println("SyncThread: Sending 'ui sync' command for instance " + MainWin.getInstance());
+				    this.out.write(( MainWin.getInstance()+"").getBytes());
+				    this.out.write((byte) 0);
+				    this.out.write("ui sync\n".getBytes());
+				    this.out.flush();
+				    System.out.println("SyncThread: 'ui sync' command sent successfully");
+				    System.err.println("SyncThread: 'ui sync' command sent successfully");
+				    
+				    // Update connection status
+				    MainWin.setConStatusConnect();
+				    MainWin.debug("Sync: Connected.");
+				    System.out.println("SyncThread: Connected! Sync feed started.");
+				    System.err.println("SyncThread: Connected! Sync feed started.");
+				    
+				    // Now load config and state in background (non-blocking, optional)
+				    // Load config - required but can fail gracefully
+				    System.out.println("SyncThread: Loading server config in background...");
+				    System.out.flush();
+				    try {
+				        MainWin.setServerConfig(UIUtils.getServerConfig());
+				        System.out.println("SyncThread: Server config loaded");
+				    } catch (Exception e) {
+				        System.err.println("SyncThread: Failed to load server config (non-fatal): " + e.getMessage());
+				        // Don't print full stack trace for timeout/connection errors
+				        if (!(e instanceof java.net.SocketTimeoutException || e instanceof java.net.ConnectException)) {
+				            e.printStackTrace();
+				        }
+				    }
+				  
+				    // Optional: load disk info (can timeout, that's OK)
+				    System.out.println("SyncThread: Loading disk info in background...");
+				    System.out.flush();
 				    try
 				    {
 				    	MainWin.setDisks(UIUtils.getServerDisks());
 				    	MainWin.applyDisks();
+				    	System.out.println("SyncThread: Disk info loaded");
 				    }
-				    catch (DWUIOperationFailedException e)
+				    catch (Exception e)
 					{
-						// don't care
+						// Don't care - disk info is optional and can timeout
+						System.out.println("SyncThread: Disk info load failed (non-fatal): " + e.getClass().getSimpleName() + " - " + e.getMessage());
 						MainWin.debug("Sync: loading disk info failed");
 					}
 				    
-				    // load midi status
-				
+				    // Optional: load midi status
+				    System.out.println("SyncThread: Loading MIDI status in background...");
+				    System.out.flush();
 				    try
 				    {
 				    	MainWin.setMidiStatus(UIUtils.getServerMidiStatus());
 				    	MainWin.applyMIDIStatus();
+				    	System.out.println("SyncThread: MIDI status loaded");
 				    }
-				    catch (DWUIOperationFailedException e)
+				    catch (Exception e)
 					{
-						// don't care
+						// Don't care
+						System.out.println("SyncThread: MIDI status load failed (non-fatal): " + e.getClass().getSimpleName() + " - " + e.getMessage());
 						MainWin.debug("Sync: loading midi status failed");
 					}
-				    
-				    
-				    sock = new Socket(host, port);
-					
-					this.out = sock.getOutputStream();
-				    this.in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
-				    
-				    MainWin.setConStatusConnect();
-				    
-				    MainWin.debug("Sync: Connected.");
-				    
-				    // start sync feed
-				    
-				    this.out.write(( MainWin.getInstance()+"").getBytes());
-				    this.out.write((byte) 0);
-				    this.out.write("ui sync\n".getBytes());
 				} 
 				catch (Exception e) 
 				{
+					System.err.println("=== SyncThread: EXCEPTION during connection attempt ===");
+					System.err.println("Exception type: " + e.getClass().getName());
+					System.err.println("Exception message: " + e.getMessage());
+					System.err.println("Stack trace:");
+					e.printStackTrace();
+					
 					if (MainWin.debugging == true)
 						e.printStackTrace();
 					
@@ -174,6 +264,7 @@ public class SyncThread implements Runnable
 					
 					if (thisread < 0)
 					{
+						System.out.println("SyncThread: Read returned -1, connection closed");
 						try 
 						{
 							sock.close();
@@ -187,6 +278,7 @@ public class SyncThread implements Runnable
 					}
 					else
 					{
+						System.out.println("SyncThread: Read " + thisread + " bytes from server");
 						buffer.append(cbuf, 0, thisread);
 						eatData(buffer);
 					}
@@ -226,12 +318,23 @@ public class SyncThread implements Runnable
 		while (le > -1)
 		{
 			if (le > 0)
-				processLine(buf.substring(0, le));
+			{
+				String line = buf.substring(0, le);
+				// Log all lines being processed for debugging
+				if (line.length() > 0 && (line.length() <= 2 || line.charAt(1) == ':')) {
+					System.out.println("SyncThread: Processing line: '" + line + "' (length=" + line.length() + ")");
+				}
+				processLine(line);
+			}
 			
 			buf.delete(0, le+1);
 			le = buf.indexOf(LINE_END);
 		}
 		
+		// Log remaining buffer if it's getting large (might indicate missing line endings)
+		if (buf.length() > 100) {
+			System.out.println("SyncThread: WARNING - Large buffer remaining (" + buf.length() + " chars), first 100 chars: '" + buf.substring(0, Math.min(100, buf.length())) + "'");
+		}
 	}
 
 	
@@ -240,19 +343,30 @@ public class SyncThread implements Runnable
 		// drives
 		if (line.equals("D"))
 		{
-			//System.out.println("D " + this.params.get("d") + ": " + this.params.get("k") + " = " + this.params.get("v"));
+			System.out.println("SyncThread: Received disk event line 'D'");
+			System.out.println("SyncThread: params d=" + this.params.get("d") + ", k=" + this.params.get("k") + ", v=" + this.params.get("v"));
 			
 			if (this.params.containsKey("d") && (this.params.get("d") != null))
 			{
 				try
 				{
-					MainWin.submitDiskEvent(Integer.parseInt(this.params.get("d")), this.params.get("k"), this.params.get("v") );
+					int diskNum = Integer.parseInt(this.params.get("d"));
+					String key = this.params.get("k");
+					String val = this.params.get("v");
+					System.out.println("SyncThread: Calling submitDiskEvent(disk=" + diskNum + ", key=" + key + ", val=" + val + ")");
+					MainWin.submitDiskEvent(diskNum, key, val);
+					// Clear params after processing disk event
+					this.params.clear();
 				}
 				catch (NumberFormatException e)
 				{
-					// ignore
+					System.err.println("SyncThread: Error parsing disk number: " + e.getMessage());
+					this.params.clear();
 				}
 				
+			} else {
+				System.err.println("SyncThread: Missing 'd' parameter in disk event");
+				this.params.clear();
 			}
 		}
 		// server status
@@ -316,10 +430,12 @@ public class SyncThread implements Runnable
 				}
 				
 				MainWin.submitServerStatusEvent(ssbuf);
+				// Clear params after processing server status event
+				this.params.clear();
 			}
 			catch (NumberFormatException e)
 			{
-				
+				this.params.clear();
 			}
 			
 		}
@@ -342,6 +458,8 @@ public class SyncThread implements Runnable
 				logbuf.setSource(this.params.get("s"));
 			
 			MainWin.addToServerLog(logbuf.clone());
+			// Clear params after processing log event
+			this.params.clear();
 				
 		}
 		// instance config
@@ -366,6 +484,8 @@ public class SyncThread implements Runnable
 				}
 					
 			}
+			// Clear params after processing instance config event
+			this.params.clear();
 		}
 		// server config
 		else if (line.equals("C"))
@@ -381,6 +501,8 @@ public class SyncThread implements Runnable
 				}
 					
 			}
+			// Clear params after processing server config event
+			this.params.clear();
 		}
 		// MIDI
 		else if (line.equals("M"))
@@ -408,6 +530,8 @@ public class SyncThread implements Runnable
 				
 				MainWin.applyMIDIStatus();
 			}
+			// Clear params after processing MIDI event
+			this.params.clear();
 		}
 		
 		
@@ -424,7 +548,18 @@ public class SyncThread implements Runnable
 					val = line.substring(2);
 				}
 
-				this.params.put(line.substring(0,1), val);
+				String paramKey = line.substring(0,1);
+				this.params.put(paramKey, val);
+				
+				// Debug logging for disk-related params
+				if (paramKey.equals("d") || paramKey.equals("k") || paramKey.equals("v")) {
+					System.out.println("SyncThread: Parsed param " + paramKey + "=" + val + " (current params: d=" + this.params.get("d") + ", k=" + this.params.get("k") + ", v=" + this.params.get("v") + ")");
+				}
+			}
+		} else {
+			// Log non-param lines for debugging (including event type lines)
+			if (line.length() > 0) {
+				System.out.println("SyncThread: Received event type line: '" + line + "' (current params: d=" + this.params.get("d") + ", k=" + this.params.get("k") + ", v=" + this.params.get("v") + ")");
 			}
 		}
 		

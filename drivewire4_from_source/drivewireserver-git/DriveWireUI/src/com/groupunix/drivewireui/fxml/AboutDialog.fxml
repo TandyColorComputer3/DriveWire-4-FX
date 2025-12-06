@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<DialogPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" stylesheets="@../css/application.css">
+   <content>
+      <VBox spacing="15.0" alignment="CENTER">
+         <children>
+            <Label styleClass="title" text="DriveWire" style="-fx-font-size: 24px;" />
+            <Label text="User Interface" style="-fx-font-size: 18px;" />
+            <Separator />
+            <Label fx:id="versionLabel" text="Version 4.3.5p" />
+            <Label fx:id="dateLabel" text="Date: 10/20/2025" />
+            <Separator />
+            <Label text="by mobster #3" />
+            <Separator />
+            <Label text="Special thanks to:" style="-fx-font-weight: bold;" />
+            <TextArea fx:id="thanksTextArea" editable="false" wrapText="true" prefRowCount="8" prefColumnCount="40" />
+         </children>
+         <padding>
+            <Insets bottom="15.0" left="15.0" right="15.0" top="15.0" />
+         </padding>
+      </VBox>
+   </content>
+</DialogPane>
+

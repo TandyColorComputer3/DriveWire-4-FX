@@ -29,6 +29,15 @@ public class DiskTableUpdate
 		this.value = img;
 
 	}
+
+	public DiskTableUpdate(int disk, String key, Integer val)
+	{
+		this.disk = disk;
+		this.key = key;
+		
+		this.value = val;
+
+	}
 	
 	
 	public String getKey()

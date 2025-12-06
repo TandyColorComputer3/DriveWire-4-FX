@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.web.WebView?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.groupunix.drivewireui.BrowserController" stylesheets="@../css/application.css">
+   <top>
+      <HBox alignment="CENTER_LEFT" spacing="5" style="-fx-background-color: #f0f0f0; -fx-padding: 5;">
+         <children>
+            <Button fx:id="backButton" mnemonicParsing="false" onAction="#handleBack" text="◀" style="-fx-min-width: 30;" />
+            <Button fx:id="forwardButton" mnemonicParsing="false" onAction="#handleForward" text="▶" style="-fx-min-width: 30;" />
+            <Button fx:id="reloadButton" mnemonicParsing="false" onAction="#handleReload" text="⟳" style="-fx-min-width: 30;" />
+            <Separator orientation="VERTICAL" />
+            <ComboBox fx:id="urlComboBox" onAction="#handleUrlSelected" promptText="Enter URL..." editable="true" HBox.hgrow="ALWAYS" />
+            <Separator orientation="VERTICAL" />
+            <Button fx:id="driveToggleButton" mnemonicParsing="false" onAction="#handleToggleAppendMode" tooltip="Toggle append mode" />
+            <Spinner fx:id="driveSpinner" editable="true" min="0" max="255" value="0" tooltip="Working drive" />
+            <Button fx:id="helpButton" mnemonicParsing="false" onAction="#handleHelp" text="?" tooltip="Show browser help" />
+         </children>
+      </HBox>
+   </top>
+   <center>
+      <WebView fx:id="webView" />
+   </center>
+</BorderPane>
+
