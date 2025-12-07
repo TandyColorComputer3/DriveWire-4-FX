@@ -1,10 +1,15 @@
 package com.groupunix.drivewireui;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -15,7 +20,13 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.canvas.Canvas;
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.Region;
 import javafx.stage.Stage;
+import javafx.stage.Window;
+import javafx.util.Duration;
 
 /**
  * Controller for the main DriveWire UI window.
@@ -24,7 +35,10 @@ import javafx.stage.Stage;
 public class MainWindowController {
     
     @FXML private MenuBar menuBar;
+    @FXML private SplitPane splitPane;
     @FXML private TableView<DiskTableItem> diskTable;
+    @FXML private ContextMenu diskContextMenu;
+    @FXML private MenuItem propertiesMenuItem;
     @FXML private TableColumn<DiskTableItem, Integer> ledColumn;
     @FXML private TableColumn<DiskTableItem, Integer> driveColumn;
     @FXML private TableColumn<DiskTableItem, String> fileColumn;
@@ -42,6 +56,7 @@ public class MainWindowController {
     @FXML private Canvas canvasVSerialOps;
     @FXML private Label statusLabel;
     @FXML private Label serverLabel;
+    @FXML private Label diskPathLabel;
     @FXML private Label versionLabel;
     @FXML private CheckMenuItem hdbdosTranslationMenuItem;
     @FXML private CheckMenuItem restartClientsMenuItem;
@@ -51,6 +66,9 @@ public class MainWindowController {
     @FXML private CheckMenuItem lockInstrumentsMenuItem;
     @FXML private CheckMenuItem darkModeMenuItem;
     @FXML private MenuItem configEditorMenuItem;
+    @FXML private ToggleButton viewModeToggle;
+    @FXML private VBox dashboardView;
+    @FXML private VBox advancedView;
     
     private Stage primaryStage;
     private boolean darkModeEnabled = false;
@@ -66,6 +84,14 @@ public class MainWindowController {
             // Initialize disk table
             diskTable.setItems(diskTableData);
             System.out.println("Disk table items set");
+            
+            // Ensure Properties menu item is enabled
+            if (propertiesMenuItem != null) {
+                propertiesMenuItem.setDisable(false);
+                System.out.println("Properties menu item initialized and enabled");
+            } else {
+                System.err.println("WARNING: propertiesMenuItem is null!");
+            }
         
         // Set up cell value factories
         ledColumn.setCellValueFactory(new PropertyValueFactory<>("led"));
@@ -129,16 +155,18 @@ public class MainWindowController {
             }
         });
         
-        // File column - center aligned text
+        // File column - center aligned text, always extract filename even if full path is set
         fileColumn.setCellFactory(column -> new TableCell<DiskTableItem, String>() {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
                 setAlignment(javafx.geometry.Pos.CENTER);
-                if (empty || item == null) {
+                if (empty || item == null || item.isEmpty()) {
                     setText(null);
                 } else {
-                    setText(item);
+                    // Always extract filename, even if full path was accidentally set
+                    String filename = UIUtils.getFilenameFromURI(item);
+                    setText(filename);
                 }
             }
         });
@@ -180,14 +208,73 @@ public class MainWindowController {
         
         // Handle disk table selection
         diskTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+            System.out.println("=== Disk selection changed ===");
+            System.out.println("Old selection: " + (oldSelection != null ? "Drive " + oldSelection.getDrive() : "null"));
+            System.out.println("New selection: " + (newSelection != null ? "Drive " + newSelection.getDrive() : "null"));
+            System.out.println("diskPathLabel is null: " + (diskPathLabel == null));
+            
             if (newSelection != null) {
                 MainWin.currentDisk = newSelection.getDrive();
                 MainWin.sdisk = newSelection.getDrive();
+                
+                // Update path label in bottom status bar
+                int drive = newSelection.getDrive();
+                System.out.println("Checking disk " + drive + " for path...");
+                System.out.println("MainWin.disks[" + drive + "] is null: " + (MainWin.disks[drive] == null));
+                
+                String fullPath = null;
+                
+                // Try to get path from MainWin.disks first
+                if (MainWin.disks[drive] != null && MainWin.disks[drive].isLoaded()) {
+                    fullPath = MainWin.disks[drive].getPath();
+                    System.out.println("Got path from MainWin.disks[" + drive + "]: " + fullPath);
+                }
+                
+                // If not available, try to get from config
+                if ((fullPath == null || fullPath.isEmpty()) && MainWin.config != null) {
+                    String configPath = MainWin.config.getString("DiskPath_" + drive, null);
+                    if (configPath != null && !configPath.isEmpty()) {
+                        fullPath = configPath;
+                        System.out.println("Got path from config DiskPath_" + drive + ": " + fullPath);
+                    }
+                }
+                
+                if (fullPath != null && !fullPath.isEmpty()) {
+                    if (diskPathLabel != null) {
+                        diskPathLabel.setText(fullPath);
+                        System.out.println("Set diskPathLabel text to: " + fullPath);
+                        System.out.println("diskPathLabel text is now: " + diskPathLabel.getText());
+                    } else {
+                        System.err.println("ERROR: diskPathLabel is null when trying to set path!");
+                    }
+                } else {
+                    System.out.println("No path available for disk " + drive);
+                    if (diskPathLabel != null) {
+                        diskPathLabel.setText("");
+                    }
+                }
+            } else {
+                // No selection - clear path label
+                System.out.println("No disk selected, clearing path label");
+                if (diskPathLabel != null) {
+                    diskPathLabel.setText("");
+                }
             }
         });
         
         // Initialize version label
         versionLabel.setText("DriveWire " + MainWin.DWUIVersion.toString());
+        
+        // Initialize disk path label
+        if (diskPathLabel != null) {
+            diskPathLabel.setText("");
+            diskPathLabel.setVisible(true);
+            diskPathLabel.setManaged(true);
+            System.out.println("diskPathLabel initialized - visible: " + diskPathLabel.isVisible() + ", managed: " + diskPathLabel.isManaged());
+            System.out.println("diskPathLabel parent: " + (diskPathLabel.getParent() != null ? diskPathLabel.getParent().getClass().getName() : "null"));
+        } else {
+            System.err.println("WARNING: diskPathLabel is null! FXML may not have loaded correctly.");
+        }
         
         // Initialize status
         updateConnectionStatus(false);
@@ -197,6 +284,15 @@ public class MainWindowController {
         
         // Load dark mode preference
         loadDarkModePreference();
+        
+        // Load and restore view mode (Dashboard/Advanced)
+        loadViewMode();
+        
+        // Load and restore UI layout (split pane divider, column widths)
+        loadUILayout();
+        
+        // Set up listeners to save UI layout when changed
+        setupUILayoutListeners();
         
         // Start disk table updater thread
         if (MainWin.diskTableUpdater == null) {
@@ -241,6 +337,207 @@ public class MainWindowController {
      */
     public void setPrimaryStage(Stage stage) {
         this.primaryStage = stage;
+        
+        // Save UI layout when window closes (before shutdown)
+        if (stage != null) {
+            stage.setOnCloseRequest(e -> {
+                System.out.println("Window closing - saving UI layout...");
+                saveUILayout();
+                // Don't consume the event - let MainWinFX handle shutdown
+            });
+        }
+    }
+    
+    /**
+     * Load UI layout from config (split pane divider position, column widths).
+     */
+    private void loadUILayout() {
+        if (MainWin.config == null) {
+            return;
+        }
+        
+        Platform.runLater(() -> {
+            try {
+                // Load split pane divider position
+                if (splitPane != null) {
+                    double dividerPos = MainWin.config.getDouble("MainWin_SplitPane_Divider", 0.3);
+                    // Clamp between 0.0 and 1.0
+                    dividerPos = Math.max(0.0, Math.min(1.0, dividerPos));
+                    splitPane.setDividerPositions(dividerPos);
+                    System.out.println("Loaded split pane divider position: " + dividerPos);
+                }
+                
+                // Load column widths
+                if (ledColumn != null) {
+                    double width = MainWin.config.getDouble("DiskTable_LED_Width", ledColumn.getPrefWidth());
+                    if (width >= ledColumn.getMinWidth()) {
+                        ledColumn.setPrefWidth(width);
+                    }
+                }
+                if (driveColumn != null) {
+                    double width = MainWin.config.getDouble("DiskTable_Drive_Width", driveColumn.getPrefWidth());
+                    if (width >= driveColumn.getMinWidth()) {
+                        driveColumn.setPrefWidth(width);
+                    }
+                }
+                if (fileColumn != null) {
+                    double width = MainWin.config.getDouble("DiskTable_File_Width", fileColumn.getPrefWidth());
+                    if (width >= fileColumn.getMinWidth()) {
+                        fileColumn.setPrefWidth(width);
+                    }
+                }
+                if (readsColumn != null) {
+                    double width = MainWin.config.getDouble("DiskTable_Reads_Width", readsColumn.getPrefWidth());
+                    if (width >= readsColumn.getMinWidth()) {
+                        readsColumn.setPrefWidth(width);
+                    }
+                }
+                if (writesColumn != null) {
+                    double width = MainWin.config.getDouble("DiskTable_Writes_Width", writesColumn.getPrefWidth());
+                    if (width >= writesColumn.getMinWidth()) {
+                        writesColumn.setPrefWidth(width);
+                    }
+                }
+                
+                System.out.println("Loaded UI layout from config");
+            } catch (Exception e) {
+                System.err.println("Error loading UI layout: " + e.getMessage());
+            }
+        });
+    }
+    
+    /**
+     * Set up listeners to save UI layout when dividers or columns are resized.
+     */
+    private void setupUILayoutListeners() {
+        // Use a debounce mechanism to avoid excessive saves
+        javafx.util.Duration debounceDelay = javafx.util.Duration.millis(500);
+        javafx.animation.Timeline debounceTimeline = new javafx.animation.Timeline();
+        
+        Runnable debouncedSave = () -> {
+            debounceTimeline.stop();
+            debounceTimeline.getKeyFrames().clear();
+            debounceTimeline.getKeyFrames().add(new javafx.animation.KeyFrame(debounceDelay, e -> {
+                System.out.println("Saving UI layout (debounced)...");
+                saveUILayout();
+            }));
+            debounceTimeline.play();
+        };
+        
+        if (splitPane != null) {
+            // Listen for divider position changes - use multiple approaches for reliability
+            // Approach 1: Listen to divider position property changes
+            Platform.runLater(() -> {
+                if (splitPane.getDividers().size() > 0) {
+                    splitPane.getDividers().forEach(divider -> {
+                        divider.positionProperty().addListener((obs, oldVal, newVal) -> {
+                            if (oldVal != null && newVal != null && Math.abs(oldVal.doubleValue() - newVal.doubleValue()) > 0.001) {
+                                System.out.println("Divider position changed: " + oldVal + " -> " + newVal);
+                                debouncedSave.run();
+                            }
+                        });
+                    });
+                }
+            });
+            
+            // Approach 2: Listen to mouse release events on the split pane (catches drag end)
+            splitPane.setOnMouseReleased(e -> {
+                System.out.println("Mouse released on split pane, saving divider position");
+                saveUILayout();
+            });
+            
+            // Approach 3: Periodically check divider positions (backup)
+            javafx.animation.Timeline checkTimeline = new javafx.animation.Timeline(
+                new KeyFrame(Duration.millis(1000), e -> {
+                    if (splitPane.getDividerPositions().length > 0) {
+                        double currentPos = splitPane.getDividerPositions()[0];
+                        // This will be checked against last saved position if needed
+                    }
+                })
+            );
+            checkTimeline.setCycleCount(javafx.animation.Timeline.INDEFINITE);
+            // Don't start this - it's just a backup approach
+        }
+        
+        // Listen for column width changes
+        if (ledColumn != null) {
+            ledColumn.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() != oldVal.doubleValue()) {
+                    debouncedSave.run();
+                }
+            });
+        }
+        if (driveColumn != null) {
+            driveColumn.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() != oldVal.doubleValue()) {
+                    debouncedSave.run();
+                }
+            });
+        }
+        if (fileColumn != null) {
+            fileColumn.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() != oldVal.doubleValue()) {
+                    debouncedSave.run();
+                }
+            });
+        }
+        if (readsColumn != null) {
+            readsColumn.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() != oldVal.doubleValue()) {
+                    debouncedSave.run();
+                }
+            });
+        }
+        if (writesColumn != null) {
+            writesColumn.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() != oldVal.doubleValue()) {
+                    debouncedSave.run();
+                }
+            });
+        }
+    }
+    
+    /**
+     * Save UI layout to config (split pane divider position, column widths).
+     */
+    public void saveUILayout() {
+        if (MainWin.config == null) {
+            System.err.println("Cannot save UI layout: config is null");
+            return;
+        }
+        
+        try {
+            // Save split pane divider position
+            if (splitPane != null && splitPane.getDividerPositions().length > 0) {
+                double dividerPos = splitPane.getDividerPositions()[0];
+                MainWin.config.setProperty("MainWin_SplitPane_Divider", dividerPos);
+                System.out.println("Saved split pane divider position: " + dividerPos);
+            } else {
+                System.err.println("Cannot save divider position: splitPane is null or has no dividers");
+            }
+            
+            // Save column widths
+            if (ledColumn != null) {
+                MainWin.config.setProperty("DiskTable_LED_Width", ledColumn.getWidth());
+            }
+            if (driveColumn != null) {
+                MainWin.config.setProperty("DiskTable_Drive_Width", driveColumn.getWidth());
+            }
+            if (fileColumn != null) {
+                MainWin.config.setProperty("DiskTable_File_Width", fileColumn.getWidth());
+            }
+            if (readsColumn != null) {
+                MainWin.config.setProperty("DiskTable_Reads_Width", readsColumn.getWidth());
+            }
+            if (writesColumn != null) {
+                MainWin.config.setProperty("DiskTable_Writes_Width", writesColumn.getWidth());
+            }
+            
+            // Save config (auto-save should handle this, but ensure it's saved)
+            MainWin.config.save();
+        } catch (Exception e) {
+            System.err.println("Error saving UI layout: " + e.getMessage());
+        }
     }
     
     /**
@@ -263,12 +560,16 @@ public class MainWindowController {
                 statusLabel.setText("Connected");
                 statusLabel.getStyleClass().removeAll("status-disconnected");
                 statusLabel.getStyleClass().add("status-connected");
-                serverLabel.setText("Server: " + MainWin.host + ":" + MainWin.port + " (Instance " + MainWin.instance + ")");
+                // Show "Client: IP:port" format
+                String host = MainWin.host != null ? MainWin.host : "unknown";
+                int port = MainWin.port > 0 ? MainWin.port : 6800;
+                serverLabel.setText("Client: " + host + ":" + port);
             } else {
                 statusLabel.setText("Disconnected");
                 statusLabel.getStyleClass().removeAll("status-connected");
                 statusLabel.getStyleClass().add("status-disconnected");
-                serverLabel.setText("Server: Not connected");
+                // Show nothing when disconnected
+                serverLabel.setText("");
             }
         });
     }
@@ -278,17 +579,37 @@ public class MainWindowController {
      */
     private void updateMenuStates() {
         if (MainWin.config != null) {
-            // Try to get instance config, but fall back to main config if null
+            // Load HDBDOSMode from UI config first (for persistence)
+            // Then try instance config if available (for current server state)
+            boolean hdbdosMode = MainWin.config.getBoolean("HDBDOSMode", false);
+            
+            // Try to get instance config to check current server state
             org.apache.commons.configuration.HierarchicalConfiguration instanceConfig = MainWin.getInstanceConfig();
-            if (instanceConfig == null) {
-                System.err.println("WARNING: MainWin.getInstanceConfig() returned null, using MainWin.config");
-                instanceConfig = MainWin.config;
+            if (instanceConfig != null) {
+                // If instance config has HDBDOSMode, use that (it's the source of truth when connected)
+                if (instanceConfig.containsKey("HDBDOSMode")) {
+                    hdbdosMode = instanceConfig.getBoolean("HDBDOSMode", false);
+                } else {
+                    // If instance config doesn't have it, apply the UI config value to the server
+                    if (MainWin.connected) {
+                        MainWin.sendCommand("dw config set HDBDOSMode " + hdbdosMode);
+                    }
+                }
             }
             
-            hdbdosTranslationMenuItem.setSelected(
-                instanceConfig.getBoolean("HDBDOSMode", false));
+            hdbdosTranslationMenuItem.setSelected(hdbdosMode);
+            
+            // Log if HDB-DOS translation is enabled
+            if (hdbdosMode) {
+                com.groupunix.drivewireui.LogItem logItem = new com.groupunix.drivewireui.LogItem("HDB-DOS translation is enabled");
+                logItem.setLevel("INFO");
+                logItem.setSource("DriveWireUI");
+                MainWin.addToServerLog(logItem);
+            }
+            
             restartClientsMenuItem.setSelected(
-                instanceConfig.getBoolean("RestartClientsOnOpen", false));
+                instanceConfig != null ? instanceConfig.getBoolean("RestartClientsOnOpen", false) : 
+                MainWin.config.getBoolean("RestartClientsOnOpen", false));
             useInternalServerMenuItem.setSelected(
                 MainWin.config.getBoolean("LocalServer", false));
             useRemoteFileMenuItem.setSelected(
@@ -309,16 +630,33 @@ public class MainWindowController {
     public void refreshDiskTable() {
         Platform.runLater(() -> {
             synchronized (diskTableData) {
+                DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+                int selectedDrive = (selected != null) ? selected.getDrive() : -1;
+                
                 for (int i = 0; i < 256; i++) {
                     DiskTableItem item = diskTableData.get(i);
                     if (MainWin.disks[i] != null && MainWin.disks[i].isLoaded()) {
-                        item.setFile(MainWin.disks[i].getPath());
+                        // Extract filename from full path for display
+                        String fullPath = MainWin.disks[i].getPath();
+                        String filename = UIUtils.getFilenameFromURI(fullPath);
+                        item.setFile(filename);
                         item.setReads(Integer.parseInt(MainWin.disks[i].getParam("_reads").toString()));
                         item.setWrites(Integer.parseInt(MainWin.disks[i].getParam("_writes").toString()));
+                        
+                        // Update path label if this disk is currently selected
+                        if (i == selectedDrive && diskPathLabel != null) {
+                            diskPathLabel.setText(fullPath);
+                            System.out.println("Updated path label for selected drive " + i + ": " + fullPath);
+                        }
                     } else {
                         item.setFile("");
                         item.setReads(0);
                         item.setWrites(0);
+                        
+                        // Clear path label if this disk is currently selected
+                        if (i == selectedDrive && diskPathLabel != null) {
+                            diskPathLabel.setText("");
+                        }
                     }
                 }
             }
@@ -354,17 +692,27 @@ public class MainWindowController {
                                 item.setLed(0);
                             }
                         }
+                        // Force table refresh to show updated LED state
+                        diskTable.refresh();
                     } else if (key.equals("_reads")) {
                         try {
-                            item.setReads(Integer.parseInt(value.toString()));
+                            int readsValue = Integer.parseInt(value.toString());
+                            item.setReads(readsValue);
+                            System.out.println("MainWindowController: Updated disk " + disk + " reads to " + readsValue);
+                            // Force table refresh to show updated read count
+                            diskTable.refresh();
                         } catch (NumberFormatException e) {
-                            // Ignore
+                            System.err.println("MainWindowController: Error parsing _reads value: " + value);
                         }
                     } else if (key.equals("_writes")) {
                         try {
-                            item.setWrites(Integer.parseInt(value.toString()));
+                            int writesValue = Integer.parseInt(value.toString());
+                            item.setWrites(writesValue);
+                            System.out.println("MainWindowController: Updated disk " + disk + " writes to " + writesValue);
+                            // Force table refresh to show updated write count
+                            diskTable.refresh();
                         } catch (NumberFormatException e) {
-                            // Ignore
+                            System.err.println("MainWindowController: Error parsing _writes value: " + value);
                         }
                     } else if (key.equals("*insert")) {
                         // Extract filename from URI/path
@@ -384,8 +732,14 @@ public class MainWindowController {
                         // LED will be set to 0 by the separate LED update, but set it here too for immediate feedback
                         item.setLed(0);
                         
-                        System.out.println("Disk " + disk + " inserted: " + filename + " (from " + filePath + ")");
-                        System.out.println("  -> Drive: " + item.getDrive() + ", File: " + item.getFile() + ", Reads: " + item.getReads() + ", Writes: " + item.getWrites() + ", LED: " + item.getLed());
+                        System.out.println("Disk " + disk + " inserted: filename=" + filename + ", fullPath=" + filePath);
+                        System.out.println("  -> Drive: " + item.getDrive() + ", File (stored): " + item.getFile() + ", Reads: " + item.getReads() + ", Writes: " + item.getWrites() + ", LED: " + item.getLed());
+                        
+                        // Update path label if this disk is currently selected
+                        DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+                        if (selected != null && selected.getDrive() == disk) {
+                            diskPathLabel.setText(filePath);
+                        }
                         
                         // Force table refresh to ensure UI updates immediately
                         diskTable.refresh();
@@ -395,6 +749,13 @@ public class MainWindowController {
                         item.setWrites(0);
                         item.setLed(0);
                         System.out.println("Disk " + disk + " ejected");
+                        
+                        // Clear path label if this disk is currently selected
+                        DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+                        if (selected != null && selected.getDrive() == disk) {
+                            diskPathLabel.setText("");
+                        }
+                        
                         // Force table refresh to ensure UI updates
                         diskTable.refresh();
                     } else if (key.equals("File")) {
@@ -403,6 +764,13 @@ public class MainWindowController {
                         String filename = UIUtils.getFilenameFromURI(filePath);
                         item.setFile(filename);
                         System.out.println("Disk " + disk + " file updated: " + filename);
+                        
+                        // Update path label if this disk is currently selected
+                        DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+                        if (selected != null && selected.getDrive() == disk) {
+                            diskPathLabel.setText(filePath);
+                        }
+                        
                         // Force table refresh to ensure UI updates
                         diskTable.refresh();
                     } else if (key.equals("Drive")) {
@@ -412,6 +780,21 @@ public class MainWindowController {
                         } catch (NumberFormatException e) {
                             // Ignore
                         }
+                    } else if (key.equals("_path") || key.equals("path")) {
+                        // Path parameter - extract filename for File column, store full path for label
+                        String filePath = value.toString();
+                        String filename = UIUtils.getFilenameFromURI(filePath);
+                        item.setFile(filename);
+                        System.out.println("Disk " + disk + " path updated: " + filename + " (full path: " + filePath + ")");
+                        
+                        // Update path label if this disk is currently selected
+                        DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+                        if (selected != null && selected.getDrive() == disk) {
+                            diskPathLabel.setText(filePath);
+                        }
+                        
+                        // Force table refresh to ensure UI updates
+                        diskTable.refresh();
                     } else if (key.equals("Location")) {
                         // Location update - we don't display this in the table, but log it
                         System.out.println("Disk " + disk + " location: " + value.toString());
@@ -455,9 +838,141 @@ public class MainWindowController {
     }
     
     @FXML
+    private void handleDisconnect() {
+        // Disconnect from current server
+        Platform.runLater(() -> {
+            try {
+                System.out.println("Disconnecting from server...");
+                
+                // Clear host/port first to prevent reconnection
+                String oldHost = MainWin.getHost();
+                int oldPort = MainWin.getPort();
+                MainWin.setHost(null);
+                MainWin.setPort("0");
+                
+                // Restart connection (this will disconnect the old one)
+                // Since host is null, it won't reconnect
+                MainWin.restartServerConn();
+                
+                // Set connection status to disconnected
+                synchronized (MainWin.connected) {
+                    MainWin.connected = false;
+                }
+                MainWin.setItemsConnectionEnabled(false);
+                
+                // Update UI
+                updateConnectionStatus(false);
+                
+                System.out.println("Disconnected from server (was: " + oldHost + ":" + oldPort + ")");
+                
+                // Show confirmation
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Disconnected");
+                alert.setHeaderText("Disconnected from server");
+                alert.setContentText("You have been disconnected from the DriveWire server.\n\nPrevious connection: " + 
+                    (oldHost != null ? oldHost + ":" + oldPort : "unknown") + 
+                    "\n\nUse 'Choose server...' to connect to a different server.");
+                alert.initOwner(primaryStage);
+                alert.showAndWait();
+            } catch (Exception e) {
+                System.err.println("Error disconnecting: " + e.getMessage());
+                e.printStackTrace();
+                
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Disconnect Error");
+                alert.setHeaderText("Failed to disconnect");
+                alert.setContentText("An error occurred while disconnecting: " + e.getMessage());
+                alert.initOwner(primaryStage);
+                alert.showAndWait();
+            }
+        });
+    }
+    
+    @FXML
     private void handleExit() {
         MainWin.doShutdown();
         Platform.exit();
+    }
+    
+    @FXML
+    private void handleViewModeToggle() {
+        boolean isAdvanced = viewModeToggle.isSelected();
+        updateViewMode(isAdvanced);
+        updateToggleLabels(isAdvanced);
+        saveViewMode(isAdvanced);
+    }
+    
+    /**
+     * Update the label colors to show which mode is active.
+     */
+    private void updateToggleLabels(boolean isAdvanced) {
+        // Find the labels in the toggle container
+        if (viewModeToggle != null && viewModeToggle.getParent() != null) {
+            javafx.scene.Parent parent = viewModeToggle.getParent();
+            if (parent instanceof HBox) {
+                HBox container = (HBox) parent;
+                for (javafx.scene.Node node : container.getChildren()) {
+                    if (node instanceof Label) {
+                        Label label = (Label) node;
+                        if (label.getText().equals("Dashboard")) {
+                            // Highlight Dashboard when not advanced
+                            if (!isAdvanced) {
+                                label.setStyle("-fx-text-fill: #4a9eff; -fx-font-weight: bold;");
+                            } else {
+                                label.setStyle("-fx-text-fill: #666666; -fx-font-weight: normal;");
+                            }
+                        } else if (label.getText().equals("Advanced")) {
+                            // Highlight Advanced when advanced
+                            if (isAdvanced) {
+                                label.setStyle("-fx-text-fill: #4a9eff; -fx-font-weight: bold;");
+                            } else {
+                                label.setStyle("-fx-text-fill: #666666; -fx-font-weight: normal;");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Update the view mode (Dashboard or Advanced).
+     * @param isAdvanced true for Advanced view, false for Dashboard
+     */
+    private void updateViewMode(boolean isAdvanced) {
+        if (dashboardView != null && advancedView != null) {
+            dashboardView.setVisible(!isAdvanced);
+            dashboardView.setManaged(!isAdvanced);
+            advancedView.setVisible(isAdvanced);
+            advancedView.setManaged(isAdvanced);
+        }
+    }
+    
+    /**
+     * Load view mode from config.
+     */
+    private void loadViewMode() {
+        if (MainWin.config != null && viewModeToggle != null) {
+            // Default to Advanced (true) if not set
+            boolean isAdvanced = MainWin.config.getBoolean("ViewMode_Advanced", true);
+            viewModeToggle.setSelected(isAdvanced);
+            updateViewMode(isAdvanced);
+            updateToggleLabels(isAdvanced);
+        }
+    }
+    
+    /**
+     * Save view mode to config.
+     */
+    private void saveViewMode(boolean isAdvanced) {
+        if (MainWin.config != null) {
+            try {
+                MainWin.config.setProperty("ViewMode_Advanced", isAdvanced);
+                MainWin.config.save();
+            } catch (Exception e) {
+                System.err.println("Error saving view mode: " + e.getMessage());
+            }
+        }
     }
     
     @FXML
@@ -474,6 +989,18 @@ public class MainWindowController {
     @FXML
     private void handleHdbdosTranslation() {
         boolean enabled = hdbdosTranslationMenuItem.isSelected();
+        
+        // Save to UI config for persistence
+        if (MainWin.config != null) {
+            MainWin.config.setProperty("HDBDOSMode", enabled);
+            try {
+                MainWin.config.save();
+            } catch (Exception e) {
+                System.err.println("Error saving HDBDOSMode to config: " + e.getMessage());
+            }
+        }
+        
+        // Send command to server to update instance config
         MainWin.sendCommand("dw config set HDBDOSMode " + enabled);
     }
     
@@ -845,6 +1372,12 @@ public class MainWindowController {
                         item.setWrites(0); // Will be updated by sync protocol
                         item.setLed(0); // Reset LED on insert
                         
+                        // Update path label if this disk is currently selected
+                        DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+                        if (selected != null && selected.getDrive() == diskno) {
+                            diskPathLabel.setText(filePath);
+                        }
+                        
                         System.out.println("Updated disk " + diskno + " filename after insert: " + filename + " (reads/writes will update via sync protocol)");
                         diskTable.refresh();
                     }
@@ -1024,9 +1557,221 @@ public class MainWindowController {
     
     @FXML
     private void handleDiskProperties() {
-        DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
-        if (selected != null && MainWin.disks[selected.getDrive()] != null) {
-            // TODO: Open DiskAdvancedWin dialog
+        try {
+            System.out.println("handleDiskProperties() called");
+            DiskTableItem selected = diskTable.getSelectionModel().getSelectedItem();
+            System.out.println("Selected item: " + selected);
+            
+            if (selected == null) {
+                System.out.println("No disk selected");
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("No Selection");
+                alert.setHeaderText("No disk selected");
+                alert.setContentText("Please select a disk drive from the table first.");
+                alert.showAndWait();
+                return;
+            }
+            
+            System.out.println("Selected drive: " + selected.getDrive());
+            System.out.println("Selected file: " + selected.getFile());
+            
+            // Check if table item shows a disk is inserted (has filename)
+            String filename = selected.getFile();
+            if (filename == null || filename.trim().isEmpty()) {
+                System.out.println("No disk filename in table item for drive " + selected.getDrive());
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("No Disk");
+                alert.setHeaderText("No disk inserted");
+                alert.setContentText("There is no disk inserted in drive " + selected.getDrive() + ".");
+                alert.showAndWait();
+                return;
+            }
+            
+            if (MainWin.disks == null) {
+                System.out.println("MainWin.disks is null");
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Error");
+                alert.setHeaderText("Disk system not initialized");
+                alert.setContentText("The disk system has not been initialized yet.");
+                alert.showAndWait();
+                return;
+            }
+            
+            if (selected.getDrive() < 0 || selected.getDrive() >= MainWin.disks.length) {
+                System.out.println("Invalid drive number: " + selected.getDrive());
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Error");
+                alert.setHeaderText("Invalid drive number");
+                alert.setContentText("Drive number " + selected.getDrive() + " is out of range.");
+                alert.showAndWait();
+                return;
+            }
+            
+            DiskDef disk = MainWin.disks[selected.getDrive()];
+            System.out.println("Disk from MainWin.disks: " + disk);
+            
+            // Check if existing disk has parameters (from sync events)
+            boolean hasParameters = false;
+            if (disk != null && disk.isLoaded()) {
+                Iterator<String> params = disk.getParams();
+                int paramCount = 0;
+                while (params.hasNext()) {
+                    String key = params.next();
+                    if (!key.startsWith("*")) {
+                        paramCount++;
+                    }
+                }
+                hasParameters = paramCount > 2; // More than just _path and maybe _reads/_writes
+                System.out.println("Existing disk has " + paramCount + " parameters");
+            }
+            
+            // If MainWin.disks[drive] is null or not loaded, try to create DiskDef
+            // Note: DiskDef constructor may fail in JavaFX mode due to SWT dependencies
+            // We'll try to use submitDiskEvent first, then fall back to direct creation
+            if (disk == null || !disk.isLoaded() || !hasParameters) {
+                System.out.println("Disk is null or not loaded for drive " + selected.getDrive() + ", attempting to create...");
+                
+                // Try to get full path from config
+                String diskPath = null;
+                if (MainWin.config != null) {
+                    diskPath = MainWin.config.getString("DiskPath_" + selected.getDrive(), null);
+                }
+                if (diskPath == null || diskPath.isEmpty()) {
+                    diskPath = filename;
+                }
+                
+                // Try using submitDiskEvent to create DiskDef (this is how sync events do it)
+                try {
+                    MainWin.submitDiskEvent(selected.getDrive(), "*insert", diskPath);
+                    disk = MainWin.disks[selected.getDrive()];
+                    System.out.println("Created DiskDef via submitDiskEvent for drive " + selected.getDrive());
+                    
+                    // Copy what we can from table item to populate basic parameters
+                    if (disk != null) {
+                        int reads = selected.getReads();
+                        int writes = selected.getWrites();
+                        if (reads > 0 && disk.getParam("_reads") == null) {
+                            disk.setParam("_reads", String.valueOf(reads));
+                        }
+                        if (writes > 0 && disk.getParam("_writes") == null) {
+                            disk.setParam("_writes", String.valueOf(writes));
+                        }
+                        // Set path if not already set
+                        if (diskPath != null && !diskPath.isEmpty() && disk.getParam("_path") == null) {
+                            disk.setParam("_path", diskPath);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("submitDiskEvent failed: " + e.getMessage());
+                    e.printStackTrace();
+                    // Fall back to direct creation (will likely fail in JavaFX mode)
+                    try {
+                        disk = new DiskDef(selected.getDrive());
+                        disk.setLoaded(true);
+                        if (diskPath != null && !diskPath.isEmpty()) {
+                            disk.setParam("*insert", diskPath);
+                            disk.setParam("_path", diskPath);
+                        }
+                        // Copy reads/writes from table item
+                        int reads = selected.getReads();
+                        int writes = selected.getWrites();
+                        if (reads > 0) {
+                            disk.setParam("_reads", String.valueOf(reads));
+                        }
+                        if (writes > 0) {
+                            disk.setParam("_writes", String.valueOf(writes));
+                        }
+                        MainWin.disks[selected.getDrive()] = disk;
+                        System.out.println("Created DiskDef directly for drive " + selected.getDrive());
+                    } catch (Exception e2) {
+                        System.err.println("Failed to create DiskDef (SWT initialization error in JavaFX mode): " + e2.getMessage());
+                        e2.printStackTrace();
+                        // DiskDef creation failed - can't proceed
+                        disk = null;
+                    }
+                }
+            }
+            
+            // Check disk parameters and trigger sync events if needed
+            if (disk != null) {
+                try {
+                    // Count non-* parameters
+                    Iterator<String> params = disk.getParams();
+                    int paramCount = 0;
+                    while (params.hasNext()) {
+                        String key = params.next();
+                        if (!key.startsWith("*")) {
+                            paramCount++;
+                        }
+                    }
+                    
+                    System.out.println("Disk has " + paramCount + " parameters");
+                    
+                    // If disk has very few parameters, trigger sync events by requesting disk status
+                    // This causes the server to send D: events with disk parameters
+                    if (paramCount <= 2) { // Only _path and maybe _reads/_writes
+                        System.out.println("Triggering sync events to populate disk parameters...");
+                        // Send a command that will cause the server to send disk parameter updates
+                        // The sync protocol will receive D: events and populate parameters
+                        MainWin.sendCommand("dw disk status " + selected.getDrive());
+                        
+                        // Give sync events a moment to arrive (non-blocking - just a short delay)
+                        // Sync events are processed asynchronously, so parameters will be added to the disk
+                        // The Properties dialog will show what's available, and sync events will update it
+                        System.out.println("Sync events triggered - parameters will be populated asynchronously");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error checking disk parameters: " + e.getMessage());
+                    e.printStackTrace();
+                    // Non-fatal - continue with what we have
+                }
+            }
+            
+            if (disk == null) {
+                System.out.println("Could not create or retrieve disk for drive " + selected.getDrive());
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Error");
+                alert.setHeaderText("Failed to load disk information");
+                alert.setContentText("Could not retrieve disk information for drive " + selected.getDrive() + ".\n\n" +
+                    "The disk appears to be inserted (filename: " + filename + "), but disk information is not available.\n" +
+                    "This may be a timing issue - please try again in a moment, or restart the application.");
+                alert.showAndWait();
+                return;
+            }
+            
+            System.out.println("primaryStage: " + primaryStage);
+            Window owner = null;
+            
+            if (primaryStage != null) {
+                owner = primaryStage;
+            } else if (diskTable.getScene() != null) {
+                owner = diskTable.getScene().getWindow();
+                System.out.println("Using fallback owner: " + owner);
+            }
+            
+            if (owner == null) {
+                System.out.println("Could not determine owner window");
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Error");
+                alert.setHeaderText("Window error");
+                alert.setContentText("Could not determine the parent window for the dialog.");
+                alert.showAndWait();
+                return;
+            }
+            
+            System.out.println("Creating DiskAdvancedWinFX dialog...");
+            DiskAdvancedWinFX dialog = new DiskAdvancedWinFX(owner, disk);
+            dialog.show();
+            System.out.println("Dialog shown");
+            
+        } catch (Exception e) {
+            System.err.println("Exception in handleDiskProperties: " + e.getMessage());
+            e.printStackTrace();
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Failed to open disk properties");
+            alert.setContentText("Error: " + e.getMessage());
+            alert.showAndWait();
         }
     }
     

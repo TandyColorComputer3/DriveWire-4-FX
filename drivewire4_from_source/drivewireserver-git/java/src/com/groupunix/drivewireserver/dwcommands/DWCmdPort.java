@@ -16,6 +16,7 @@ public class DWCmdPort extends DWCommand {
 		commands.addcommand(new DWCmdPortShow(dwProtocol,this));
 		commands.addcommand(new DWCmdPortClose(dwProtocol,this));
 		commands.addcommand(new DWCmdPortOpen(dwProtocol,this));
+		commands.addcommand(new DWCmdPortTCP(dwProtocol,this));
 	}
 
 	

@@ -395,6 +395,18 @@ public class MainWinFX extends Application {
             primaryStage.setOnCloseRequest(e -> {
                 e.consume();
                 logger.info("Window close requested");
+                
+                // Save UI layout before shutdown
+                if (MainWin.mainWindowController != null) {
+                    try {
+                        java.lang.reflect.Method saveMethod = MainWin.mainWindowController.getClass().getMethod("saveUILayout");
+                        saveMethod.invoke(MainWin.mainWindowController);
+                        logger.info("UI layout saved");
+                    } catch (Exception ex) {
+                        logger.warn("Failed to save UI layout: " + ex.getMessage());
+                    }
+                }
+                
                 MainWin.doShutdown();
                 Platform.exit();
             });

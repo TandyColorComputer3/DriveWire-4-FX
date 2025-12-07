@@ -5,80 +5,94 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.canvas.Canvas?>
+<?import javafx.geometry.Pos?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.groupunix.drivewireui.MainWindowController" stylesheets="@../css/application.css">
    <top>
-      <MenuBar fx:id="menuBar" styleClass="menu-bar">
-         <menus>
-            <Menu mnemonicParsing="false" text="File">
-               <items>
-                  <MenuItem mnemonicParsing="false" onAction="#handleChooseServer" text="Choose server..." />
-                  <Menu mnemonicParsing="false" text="Choose instance">
+      <HBox styleClass="menu-bar-container">
+         <children>
+            <MenuBar fx:id="menuBar" styleClass="menu-bar" HBox.hgrow="ALWAYS">
+               <menus>
+                  <Menu mnemonicParsing="false" text="File">
                      <items>
-                        <!-- Instance menu items will be populated dynamically -->
-                     </items>
-                  </Menu>
-                  <SeparatorMenuItem mnemonicParsing="false" />
-                  <MenuItem mnemonicParsing="false" onAction="#handleExit" text="Exit" />
-               </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Tools">
-               <items>
-                  <MenuItem mnemonicParsing="false" onAction="#handleEjectAllDisks" text="Eject all disks" />
-                  <MenuItem mnemonicParsing="false" onAction="#handleToggleAppendMode" text="Toggle Append Mode" />
-                  <SeparatorMenuItem mnemonicParsing="false" />
-                  <CheckMenuItem fx:id="hdbdosTranslationMenuItem" mnemonicParsing="false" onAction="#handleHdbdosTranslation" text="HDBDOS translation" />
-                  <CheckMenuItem fx:id="restartClientsMenuItem" mnemonicParsing="false" onAction="#handleRestartClients" text="Restart clients on open" />
-               </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Config">
-               <items>
-                  <MenuItem mnemonicParsing="false" onAction="#handleSimpleConfigWizard" text="Simple Config Wizard..." />
-                  <MenuItem mnemonicParsing="false" onAction="#handleConfigManager" text="Configuration Manager..." />
-                  <SeparatorMenuItem mnemonicParsing="false" />
-                  <MenuItem fx:id="configEditorMenuItem" mnemonicParsing="false" onAction="#handleConfigEditor" text="Configuration Editor..." />
-                  <Menu mnemonicParsing="false" text="User Interface Options">
-                     <items>
-                        <CheckMenuItem fx:id="useInternalServerMenuItem" mnemonicParsing="false" onAction="#handleUseInternalServer" text="Use internal server" />
-                        <CheckMenuItem fx:id="useRemoteFileMenuItem" mnemonicParsing="false" onAction="#handleUseRemoteFile" text="Use remote file dialogs" />
-                        <CheckMenuItem fx:id="noBrowsersMenuItem" mnemonicParsing="false" onAction="#handleNoBrowsers" text="Disable web browsers" />
-                     </items>
-                  </Menu>
-                  <Menu mnemonicParsing="false" text="MIDI">
-                     <items>
-                        <Menu mnemonicParsing="false" text="Set output">
+                        <MenuItem mnemonicParsing="false" onAction="#handleChooseServer" text="Choose server..." />
+                        <MenuItem mnemonicParsing="false" onAction="#handleDisconnect" text="Disconnect" />
+                        <Menu mnemonicParsing="false" text="Choose instance">
                            <items>
-                              <!-- MIDI output menu items will be populated dynamically -->
+                              <!-- Instance menu items will be populated dynamically -->
                            </items>
                         </Menu>
-                        <MenuItem mnemonicParsing="false" onAction="#handleLoadSoundbank" text="Load soundbank..." />
-                        <Menu mnemonicParsing="false" text="Set profile">
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem mnemonicParsing="false" onAction="#handleExit" text="Exit" />
+                     </items>
+                  </Menu>
+                  <Menu mnemonicParsing="false" text="Tools">
+                     <items>
+                        <MenuItem mnemonicParsing="false" onAction="#handleEjectAllDisks" text="Eject all disks" />
+                        <MenuItem mnemonicParsing="false" onAction="#handleToggleAppendMode" text="Toggle Append Mode" />
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <CheckMenuItem fx:id="hdbdosTranslationMenuItem" mnemonicParsing="false" onAction="#handleHdbdosTranslation" text="HDBDOS translation" />
+                        <CheckMenuItem fx:id="restartClientsMenuItem" mnemonicParsing="false" onAction="#handleRestartClients" text="Restart clients on open" />
+                     </items>
+                  </Menu>
+                  <Menu mnemonicParsing="false" text="Config">
+                     <items>
+                        <MenuItem mnemonicParsing="false" onAction="#handleSimpleConfigWizard" text="Simple Config Wizard..." />
+                        <MenuItem mnemonicParsing="false" onAction="#handleConfigManager" text="Configuration Manager..." />
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem fx:id="configEditorMenuItem" mnemonicParsing="false" onAction="#handleConfigEditor" text="Configuration Editor..." />
+                        <Menu mnemonicParsing="false" text="User Interface Options">
                            <items>
-                              <!-- MIDI profile menu items will be populated dynamically -->
+                              <CheckMenuItem fx:id="useInternalServerMenuItem" mnemonicParsing="false" onAction="#handleUseInternalServer" text="Use internal server" />
+                              <CheckMenuItem fx:id="useRemoteFileMenuItem" mnemonicParsing="false" onAction="#handleUseRemoteFile" text="Use remote file dialogs" />
+                              <CheckMenuItem fx:id="noBrowsersMenuItem" mnemonicParsing="false" onAction="#handleNoBrowsers" text="Disable web browsers" />
                            </items>
                         </Menu>
-                        <CheckMenuItem fx:id="lockInstrumentsMenuItem" mnemonicParsing="false" onAction="#handleLockInstruments" text="Lock instruments" />
+                        <Menu mnemonicParsing="false" text="MIDI">
+                           <items>
+                              <Menu mnemonicParsing="false" text="Set output">
+                                 <items>
+                                    <!-- MIDI output menu items will be populated dynamically -->
+                                 </items>
+                              </Menu>
+                              <MenuItem mnemonicParsing="false" onAction="#handleLoadSoundbank" text="Load soundbank..." />
+                              <Menu mnemonicParsing="false" text="Set profile">
+                                 <items>
+                                    <!-- MIDI profile menu items will be populated dynamically -->
+                                 </items>
+                              </Menu>
+                              <CheckMenuItem fx:id="lockInstrumentsMenuItem" mnemonicParsing="false" onAction="#handleLockInstruments" text="Lock instruments" />
+                           </items>
+                        </Menu>
+                        <Menu mnemonicParsing="false" text="Current Printer">
+                           <items>
+                              <!-- Printer menu items will be populated dynamically -->
+                           </items>
+                        </Menu>
                      </items>
                   </Menu>
-                  <Menu mnemonicParsing="false" text="Current Printer">
+                  <Menu mnemonicParsing="false" text="Settings">
                      <items>
-                        <!-- Printer menu items will be populated dynamically -->
+                        <CheckMenuItem fx:id="darkModeMenuItem" mnemonicParsing="false" onAction="#handleDarkMode" text="Dark Mode" />
                      </items>
                   </Menu>
-               </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Settings">
-               <items>
-                  <CheckMenuItem fx:id="darkModeMenuItem" mnemonicParsing="false" onAction="#handleDarkMode" text="Dark Mode" />
-               </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Help">
-               <items>
-                  <MenuItem mnemonicParsing="false" onAction="#handleAbout" text="About..." />
-               </items>
-            </Menu>
-         </menus>
-      </MenuBar>
+                  <Menu mnemonicParsing="false" text="Help">
+                     <items>
+                        <MenuItem mnemonicParsing="false" onAction="#handleAbout" text="About..." />
+                     </items>
+                  </Menu>
+               </menus>
+            </MenuBar>
+            <Region HBox.hgrow="ALWAYS" />
+            <HBox alignment="CENTER_RIGHT" spacing="5" styleClass="view-toggle-container">
+               <children>
+                  <Label text="Dashboard" styleClass="view-toggle-label" />
+                  <ToggleButton fx:id="viewModeToggle" onAction="#handleViewModeToggle" styleClass="view-toggle-button" />
+                  <Label text="Advanced" styleClass="view-toggle-label" />
+               </children>
+            </HBox>
+         </children>
+      </HBox>
    </top>
    <center>
       <SplitPane fx:id="splitPane" dividerPositions="0.3" orientation="HORIZONTAL">
@@ -96,77 +110,85 @@
                         <TableColumn fx:id="writesColumn" minWidth="75.0" prefWidth="75.0" text="Writes" />
                      </columns>
                      <contextMenu>
-                        <ContextMenu>
+                        <ContextMenu fx:id="diskContextMenu">
                            <items>
                               <MenuItem mnemonicParsing="false" onAction="#handleInsertDisk" text="Insert disk..." />
                               <MenuItem mnemonicParsing="false" onAction="#handleEjectDisk" text="Eject" />
                               <SeparatorMenuItem mnemonicParsing="false" />
-                              <MenuItem mnemonicParsing="false" onAction="#handleDiskProperties" text="Properties..." />
+                              <MenuItem fx:id="propertiesMenuItem" mnemonicParsing="false" onAction="#handleDiskProperties" text="Properties..." />
                            </items>
                         </ContextMenu>
                      </contextMenu>
                   </TableView>
                </children>
             </VBox>
-            <!-- Right side: Output Tabs -->
-            <VBox>
+            <!-- Right side: Dashboard or Advanced Tabs -->
+            <StackPane>
                <children>
-                  <TabPane fx:id="outputTabPane" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
-                     <tabs>
-                        <Tab fx:id="logTab" text="Log">
-                           <content>
-                              <TextArea fx:id="logTextArea" editable="false" wrapText="true" />
-                           </content>
-                        </Tab>
-                        <Tab fx:id="commandTab" text="Command">
-                           <content>
-                              <VBox>
-                                 <children>
-                                    <TextArea fx:id="commandHistoryArea" editable="false" VBox.vgrow="ALWAYS" />
-                                    <HBox>
+                  <!-- Dashboard View (blank for now) -->
+                  <VBox fx:id="dashboardView" alignment="CENTER" styleClass="dashboard-container">
+                     <children>
+                        <Label text="Dashboard" styleClass="dashboard-title" />
+                        <Label text="(Coming soon)" styleClass="dashboard-subtitle" />
+                     </children>
+                  </VBox>
+                  <!-- Advanced View (Log/Command/Statistics) -->
+                  <VBox fx:id="advancedView">
+                     <children>
+                        <TabPane fx:id="outputTabPane" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+                           <tabs>
+                              <Tab fx:id="logTab" text="Log">
+                                 <content>
+                                    <TextArea fx:id="logTextArea" editable="false" wrapText="true" />
+                                 </content>
+                              </Tab>
+                              <Tab fx:id="commandTab" text="Command">
+                                 <content>
+                                    <VBox>
                                        <children>
-                                          <TextField fx:id="commandTextField" onAction="#handleSendCommand" promptText="Enter command..." HBox.hgrow="ALWAYS" />
-                                          <Button mnemonicParsing="false" onAction="#handleSendCommand" text="Send" />
+                                          <TextArea fx:id="commandHistoryArea" editable="false" VBox.vgrow="ALWAYS" />
+                                          <HBox>
+                                             <children>
+                                                <TextField fx:id="commandTextField" onAction="#handleSendCommand" promptText="Enter command..." HBox.hgrow="ALWAYS" />
+                                                <Button mnemonicParsing="false" onAction="#handleSendCommand" text="Send" />
+                                             </children>
+                                          </HBox>
                                        </children>
-                                    </HBox>
-                                 </children>
-                              </VBox>
-                           </content>
-                        </Tab>
-                        <Tab fx:id="graphsTab" text="Statistics">
-                           <content>
-                              <VBox styleClass="graphs-container">
-                                 <children>
-                                    <HBox spacing="10" styleClass="graphs-row">
+                                    </VBox>
+                                 </content>
+                              </Tab>
+                              <Tab fx:id="graphsTab" text="Statistics">
+                                 <content>
+                                    <VBox styleClass="graphs-container" spacing="15">
                                        <children>
-                                          <VBox spacing="5">
+                                          <VBox spacing="5" styleClass="graph-box">
                                              <children>
                                                 <Label text="Memory Usage" styleClass="graph-title" />
                                                 <Canvas fx:id="canvasMemUse" width="270" height="110" styleClass="graph-canvas" />
                                              </children>
                                           </VBox>
-                                          <VBox spacing="5">
+                                          <VBox spacing="5" styleClass="graph-box">
                                              <children>
                                                 <Label text="Disk Operations/sec" styleClass="graph-title" />
                                                 <Canvas fx:id="canvasDiskOps" width="270" height="110" styleClass="graph-canvas" />
                                              </children>
                                           </VBox>
-                                          <VBox spacing="5">
+                                          <VBox spacing="5" styleClass="graph-box">
                                              <children>
                                                 <Label text="Virtual Serial Ops/sec" styleClass="graph-title" />
                                                 <Canvas fx:id="canvasVSerialOps" width="270" height="110" styleClass="graph-canvas" />
                                              </children>
                                           </VBox>
                                        </children>
-                                    </HBox>
-                                 </children>
-                              </VBox>
-                           </content>
-                        </Tab>
-                     </tabs>
-                  </TabPane>
+                                    </VBox>
+                                 </content>
+                              </Tab>
+                           </tabs>
+                        </TabPane>
+                     </children>
+                  </VBox>
                </children>
-            </VBox>
+            </StackPane>
          </items>
       </SplitPane>
    </center>
@@ -175,7 +197,11 @@
          <children>
             <Label fx:id="statusLabel" styleClass="status" text="Disconnected" />
             <Separator orientation="VERTICAL" />
-            <Label fx:id="serverLabel" styleClass="status" text="Server: Not connected" />
+            <Label fx:id="serverLabel" styleClass="status" text="" />
+            <Region HBox.hgrow="ALWAYS" />
+            <StackPane HBox.hgrow="ALWAYS" alignment="CENTER" minWidth="200">
+               <Label fx:id="diskPathLabel" styleClass="status" text="" alignment="CENTER" />
+            </StackPane>
             <Region HBox.hgrow="ALWAYS" />
             <Label fx:id="versionLabel" styleClass="status" text="DriveWire 4" />
          </children>

@@ -9,12 +9,12 @@ import com.groupunix.drivewireserver.dwprotocolhandler.DWProtocol;
 
 public class DWCmdInstanceRestart extends DWCommand {
 
-
+	private DWProtocol dwProto;
 
 	public DWCmdInstanceRestart(DWProtocol dwProto2,DWCommand parent)
 	{
 		setParentCmd(parent);
-
+		this.dwProto = dwProto2;
 	}
 	
 	public String getCommand() 
@@ -31,14 +31,23 @@ public class DWCmdInstanceRestart extends DWCommand {
 
 	public String getUsage() 
 	{
-		return "dw instance restart #";
+		return "dw instance restart [#]";
 	}
 
 	public DWCommandResponse parse(String cmdline) 
 	{
+		// If no instance number provided, use the current instance from the protocol handler
 		if (cmdline.length() == 0)
 		{
-			return(new DWCommandResponse(false,DWDefs.RC_SYNTAX_ERROR,"Syntax error: dw instance restart requires an instance # as an argument"));
+			if (this.dwProto != null)
+			{
+				return(doStart(String.valueOf(this.dwProto.getHandlerNo())));
+			}
+			else
+			{
+				// Default to instance 0 if no protocol handler available
+				return(doStart("0"));
+			}
 		}
 		
 		return(doStart(cmdline));

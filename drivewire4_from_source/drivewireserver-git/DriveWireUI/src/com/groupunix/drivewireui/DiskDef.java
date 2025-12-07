@@ -22,7 +22,7 @@ public class DiskDef implements Cloneable
 	
 	private HierarchicalConfiguration params;
 	
-	private Image diskgraph = new Image(null, DiskWin.DGRAPH_WIDTH, DiskWin.DGRAPH_HEIGHT);
+	private Image diskgraph; // Initialize conditionally to avoid SWT in JavaFX mode
 	private HashMap<Integer,Integer> sectors = new HashMap<Integer,Integer>();
 	
 	
@@ -45,21 +45,45 @@ public class DiskDef implements Cloneable
 	{
 		this.drive = driveno;
 		this.params = new HierarchicalConfiguration();
-		this.gc = new GC(this.diskgraph); 
-		this.makeNewDGraph();
 		
-		if (MainWin.config.getBoolean("DiskWin_" + driveno + "_open", false))
-		{
-			final DiskDef ref = this;
-			MainWin.getDisplay().asyncExec(new Runnable() {
-				  public void run()
-				  {
-					  setDiskwin(new DiskWin(ref , MainWin.getDiskWinInitPos(drive).x,MainWin.getDiskWinInitPos(drive).y));
-					  getDiskwin().open(MainWin.getDisplay());
-					  
-				  }
-			  });
+		// Check if we're in JavaFX mode - skip SWT initialization if so
+		boolean isJavaFXMode = System.getProperty("drivewire.ui.mode") != null;
+		
+		if (!isJavaFXMode) {
+			// SWT mode: initialize graphics objects
+			try {
+				this.diskgraph = new Image(null, DiskWin.DGRAPH_WIDTH, DiskWin.DGRAPH_HEIGHT);
+				this.gc = new GC(this.diskgraph); 
+				this.makeNewDGraph();
+			} catch (Exception e) {
+				System.err.println("Warning: Failed to initialize SWT graphics in DiskDef constructor: " + e.getMessage());
+				// Continue without graphics - disk will still work for parameter management
+			}
 			
+			// Only try to open disk window in SWT mode
+			if (MainWin.config != null && MainWin.config.getBoolean("DiskWin_" + driveno + "_open", false))
+			{
+				try {
+					final DiskDef ref = this;
+					org.eclipse.swt.widgets.Display display = MainWin.getDisplay();
+					if (display != null && !display.isDisposed()) {
+						display.asyncExec(new Runnable() {
+							  public void run()
+							  {
+								  setDiskwin(new DiskWin(ref , MainWin.getDiskWinInitPos(drive).x,MainWin.getDiskWinInitPos(drive).y));
+								  getDiskwin().open(MainWin.getDisplay());
+								  
+							  }
+						  });
+					}
+				} catch (Exception e) {
+					System.err.println("Warning: Failed to open disk window: " + e.getMessage());
+				}
+			}
+		} else {
+			// JavaFX mode: skip SWT initialization
+			// Graphics objects will remain null - this is OK for parameter management
+			System.out.println("DiskDef created in JavaFX mode (skipping SWT graphics initialization)");
 		}
 	}
 	
@@ -67,6 +91,9 @@ public class DiskDef implements Cloneable
 	
 	private void makeNewDGraph()
 	{
+		if (this.diskgraph == null) {
+			return; // Skip if graphics not initialized (JavaFX mode)
+		}
 		synchronized(this.diskgraph)
 		{
 			
@@ -361,6 +388,9 @@ public class DiskDef implements Cloneable
 
 	public Image getDiskGraph()
 	{
+		if (this.diskgraph == null || this.gc == null) {
+			return null; // Graphics not initialized (JavaFX mode)
+		}
 	 	//synchronized(this.diskgraph)
 		//{
 	 		

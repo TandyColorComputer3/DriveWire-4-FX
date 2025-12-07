@@ -653,7 +653,12 @@ public class DWVSerialPort {
 
 	public void sendConnectionAnnouncement(int conno, int localport, String hostaddr)
 	{
-		this.porthandler.announceConnection(conno, localport, hostaddr);
+		// Port handler may be null if port hasn't been fully initialized yet
+		// This is OK - announcement is optional and connection will work without it
+		if (this.porthandler != null)
+		{
+			this.porthandler.announceConnection(conno, localport, hostaddr);
+		}
 		
 	}
 

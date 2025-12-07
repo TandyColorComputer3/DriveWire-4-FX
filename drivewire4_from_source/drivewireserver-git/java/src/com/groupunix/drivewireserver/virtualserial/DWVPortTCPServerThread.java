@@ -57,31 +57,51 @@ public class DWVPortTCPServerThread implements Runnable {
 			dwVSerialPorts.setConn(this.vport,this.conno);
 		
 		
-			logger.debug("run for conn " + this.conno);
-				
-			if (sktchan == null)
+		logger.info("TCP server thread running for conn " + this.conno + " on port " + this.vport);
+			
+		if (sktchan == null)
+		{
+			logger.error("got a null socket, bailing out");
+			return;
+		}
+		
+		// Ensure port is open before starting data flow
+		try {
+			if (!dwVSerialPorts.isOpen(vport))
 			{
-				logger.warn("got a null socket, bailing out");
-				return;
+				logger.info("Port " + vport + " not open, opening it now");
+				dwVSerialPorts.openPort(vport);
 			}
+			logger.info("Port " + vport + " is open, starting data flow");
+		} catch (Exception e) {
+			logger.error("Failed to open port " + vport + ": " + e.getMessage(), e);
+			return;
+		}
 		
-			// 	set pass through mode
-			dwVSerialPorts.markConnected(vport);	
-			dwVSerialPorts.setUtilMode(vport, DWDefs.UTILMODE_TCPIN);
-			dwVSerialPorts.setPortChannel(vport, sktchan);
+		// 	set pass through mode
+		dwVSerialPorts.markConnected(vport);	
+		dwVSerialPorts.setUtilMode(vport, DWDefs.UTILMODE_TCPIN);
+		dwVSerialPorts.setPortChannel(vport, sktchan);
 		
-			int lastbyte = -1;
+		logger.info("Port " + vport + " configured for TCP pass-through, starting data loop");
 		
-			while ((wanttodie == false) && (sktchan.isOpen()) && (dwVSerialPorts.isOpen(this.vport) || (mode == MODE_TERM)))
+		int lastbyte = -1;
+		
+		while ((wanttodie == false) && (sktchan.isOpen()) && (dwVSerialPorts.isOpen(this.vport) || (mode == MODE_TERM)))
 			{
 			
 				int databyte = sktchan.socket().getInputStream().read();
 				if (databyte == -1)
 				{
+					logger.info("TCP connection closed (EOF) for conn " + this.conno);
 					wanttodie = true;
 				}
 				else
 				{
+					if (logger.isDebugEnabled())
+					{
+						logger.debug("TCP data received: " + databyte + " (0x" + Integer.toHexString(databyte) + ") for port " + this.vport);
+					}
 					// filter CR,NULL if in telnet or term mode unless PD.INT and PD.QUT = 0
 					if (((mode == MODE_TELNET) || (mode == MODE_TERM)) && ((dwVSerialPorts.getPD_INT(this.vport) != 0) || (dwVSerialPorts.getPD_QUT(this.vport) != 0)))
 					{
@@ -97,7 +117,9 @@ public class DWVPortTCPServerThread implements Runnable {
 					}
 					else
 					{
+						logger.info("TCP data received: " + databyte + " (0x" + Integer.toHexString(databyte) + ") for port " + this.vport);
 						dwVSerialPorts.writeToCoco(this.vport,(byte)databyte);
+						logger.info("Data written to virtual serial port " + this.vport + " input buffer");
 					}
 				}				
 			}

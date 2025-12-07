@@ -265,11 +265,19 @@
     -fx-background-color: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
     -fx-padding: 15;
     -fx-spacing: 15;
+    -fx-alignment: center-left;
 }
 
-.graphs-row {
-    -fx-alignment: center-left;
-    -fx-padding: 10;
+/* Graph Box - Container for each graph with soft rounded edges */
+.graph-box {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 12;
+    -fx-border-color: linear-gradient(to bottom, #e0e0e0 0%, #d0d0d0 100%);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-padding: 12;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.08), 8, 0, 0, 2);
+    -fx-spacing: 8;
 }
 
 .graph-title {
@@ -280,12 +288,12 @@
 }
 
 .graph-canvas {
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 4, 0, 0, 1);
     -fx-background-color: #ffffff;
-    -fx-border-color: #d0d0d0;
+    -fx-border-color: #e8e8e8;
     -fx-border-width: 1;
-    -fx-border-radius: 4;
-    -fx-background-radius: 4;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
 }
 
 /* Status Bar - Modern gradient */
@@ -317,5 +325,126 @@
     -fx-border-color: linear-gradient(to bottom, #4a9eff 0%, #3a8eef 100%);
     -fx-border-width: 2;
     -fx-effect: dropshadow(three-pass-box, rgba(74,158,255,0.2), 3, 0, 0, 1);
+}
+
+/* Menu Bar Container - For toggle switch */
+.menu-bar-container {
+    -fx-background-color: linear-gradient(to bottom, #ffffff 0%, #f0f0f0 100%);
+    -fx-border-color: linear-gradient(to bottom, #d0d0d0 0%, #c0c0c0 100%);
+    -fx-border-width: 0 0 1 0;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 2, 0, 0, 1);
+    -fx-padding: 0;
+}
+
+/* View Toggle Container */
+.view-toggle-container {
+    -fx-padding: 5 15 5 10;
+    -fx-alignment: center-right;
+    -fx-background-color: transparent;
+}
+
+.view-toggle-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #333333;
+}
+
+/* Toggle Switch Styling - Modern iOS/Android style with sliding thumb */
+.view-toggle-button {
+    -fx-background-color: #c0c0c0;
+    -fx-background-radius: 15;
+    -fx-pref-width: 70;
+    -fx-pref-height: 30;
+    -fx-min-width: 70;
+    -fx-min-height: 30;
+    -fx-max-width: 70;
+    -fx-max-height: 30;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 4, 0, 0, 1);
+    -fx-padding: 2;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.view-toggle-button:selected {
+    -fx-background-color: linear-gradient(to bottom, #5cb3ff 0%, #4a9eff 100%);
+}
+
+/* Create a sliding thumb indicator using layered backgrounds */
+/* Track (outer background) */
+/* Unselected = Dashboard mode, thumb on LEFT */
+.view-toggle-button {
+    -fx-background-color: 
+        #c0c0c0,                    /* Track background (unselected = Dashboard) */
+        white;                      /* Thumb circle (always white) */
+    -fx-background-insets: 
+        0,                          /* Track fills entire button */
+        2 42 2 2;                  /* Thumb: top=2, right=42 (large right margin = thumb on LEFT) */
+    -fx-background-radius: 
+        15,                         /* Track radius */
+        13;                         /* Thumb radius (slightly smaller) */
+}
+
+/* Selected = Advanced mode, thumb on RIGHT */
+.view-toggle-button:selected {
+    -fx-background-color: 
+        linear-gradient(to bottom, #5cb3ff 0%, #4a9eff 100%),  /* Track background (selected = Advanced - blue) */
+        white;                      /* Thumb circle (always white) */
+    -fx-background-insets: 
+        0,                          /* Track fills entire button */
+        2 2 2 42;                  /* Thumb: top=2, left=42 (large left margin = thumb on RIGHT) */
+    -fx-background-radius: 
+        15,                         /* Track radius */
+        13;                         /* Thumb radius */
+}
+
+/* Hide default text */
+.view-toggle-button .text {
+    -fx-text-fill: transparent;
+    -fx-font-size: 0;
+}
+
+/* Add hover effects for better feedback */
+.view-toggle-button:hover {
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 6, 0, 0, 2);
+}
+
+.view-toggle-button:selected:hover {
+    -fx-effect: dropshadow(three-pass-box, rgba(74,158,255,0.5), 6, 0, 0, 2);
+}
+
+/* Make labels change color based on selection for additional feedback */
+.view-toggle-container .view-toggle-label {
+    -fx-text-fill: #666666;
+}
+
+/* Highlight the selected label */
+.view-toggle-container:has(.view-toggle-button:selected) > Label:last-child {
+    -fx-text-fill: #4a9eff;
+    -fx-font-weight: bold;
+}
+
+.view-toggle-container:has(.view-toggle-button:not(:selected)) > Label:first-child {
+    -fx-text-fill: #4a9eff;
+    -fx-font-weight: bold;
+}
+
+/* Dashboard View */
+.dashboard-container {
+    -fx-background-color: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
+    -fx-padding: 50;
+    -fx-spacing: 20;
+}
+
+.dashboard-title {
+    -fx-font-size: 32px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #333333;
+}
+
+.dashboard-subtitle {
+    -fx-font-size: 16px;
+    -fx-text-fill: #666666;
+    -fx-font-style: italic;
 }
 

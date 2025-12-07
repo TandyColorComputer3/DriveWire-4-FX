@@ -59,7 +59,12 @@ public class UIUtils {
 	public static List<String> loadList(int instance, String arg) throws IOException, DWUIOperationFailedException
 	{
 		//TODO - ignoring instance?
-		Connection conn = new Connection(MainWin.getHost(), MainWin.getPort(), MainWin.getInstance());
+		// Fix: Use default port if port is 0 or invalid
+		int port = MainWin.getPort();
+		if (port <= 0) {
+			port = MainWin.default_Port;
+		}
+		Connection conn = new Connection(MainWin.getHost(), port, MainWin.getInstance());
 		
 		List<String> res = new ArrayList<String>();
 		
@@ -88,7 +93,12 @@ public class UIUtils {
 		
 		HashMap<String,String> values = new HashMap<String,String>();
 			
-		Connection conn = new Connection(MainWin.getHost(), MainWin.getPort(), MainWin.getInstance());
+		// Fix: Use default port if port is 0 or invalid
+		int port = MainWin.getPort();
+		if (port <= 0) {
+			port = MainWin.default_Port;
+		}
+		Connection conn = new Connection(MainWin.getHost(), port, MainWin.getInstance());
 		
 		conn.Connect();
 		
@@ -126,7 +136,12 @@ public class UIUtils {
 			
 			MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, "Connecting to server...");
 			
-			Connection conn = new Connection(MainWin.getHost(), MainWin.getPort(), MainWin.getInstance());
+			// Fix: Use default port if port is 0 or invalid
+		int port = MainWin.getPort();
+		if (port <= 0) {
+			port = MainWin.default_Port;
+		}
+		Connection conn = new Connection(MainWin.getHost(), port, MainWin.getInstance());
 		
 			conn.Connect();
 
@@ -245,7 +260,12 @@ public class UIUtils {
 			
 			MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_ACTIVE, "Connecting to server...");
 			
-			Connection conn = new Connection(MainWin.getHost(), MainWin.getPort(), MainWin.getInstance());
+			// Fix: Use default port if port is 0 or invalid
+		int port = MainWin.getPort();
+		if (port <= 0) {
+			port = MainWin.default_Port;
+		}
+		Connection conn = new Connection(MainWin.getHost(), port, MainWin.getInstance());
 		
 			conn.Connect();
 			
@@ -310,7 +330,12 @@ public class UIUtils {
 
 	public static HierarchicalConfiguration getServerConfig() throws UnknownHostException, IOException, ConfigurationException, DWUIOperationFailedException 
 	{
-		Connection conn = new Connection(MainWin.getHost(), MainWin.getPort(), MainWin.getInstance());
+		// Fix: Use default port if port is 0 or invalid
+		int port = MainWin.getPort();
+		if (port <= 0) {
+			port = MainWin.default_Port;
+		}
+		Connection conn = new Connection(MainWin.getHost(), port, MainWin.getInstance());
 		
 		conn.Connect();
 		
@@ -514,8 +539,14 @@ public class UIUtils {
 	{
 		String res = string;
 		
-		if ((res.indexOf('/') > -1) && (res.indexOf('/') < (res.length()-1)))
-					res = res.substring(res.lastIndexOf('/')+1);
+		// Handle both forward slashes (Unix/URI) and backslashes (Windows)
+		int lastForwardSlash = res.lastIndexOf('/');
+		int lastBackslash = res.lastIndexOf('\\');
+		int lastSeparator = Math.max(lastForwardSlash, lastBackslash);
+		
+		if (lastSeparator > -1 && lastSeparator < (res.length() - 1)) {
+			res = res.substring(lastSeparator + 1);
+		}
 			
 		return(res);
 	}

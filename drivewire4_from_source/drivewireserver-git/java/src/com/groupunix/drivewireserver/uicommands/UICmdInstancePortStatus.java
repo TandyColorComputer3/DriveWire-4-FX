@@ -52,12 +52,21 @@ public class UICmdInstancePortStatus extends DWCommand {
 		
 		if (this.gproto == null)
 		{
-			if  ((DriveWireServer.isValidHandlerNo(this.dwuithread.getInstance()) && (DriveWireServer.getHandler(this.dwuithread.getInstance()).hasVSerial())))
-			{
-				gproto = (DWVSerialProtocol) DriveWireServer.getHandler(this.dwuithread.getInstance());
+			int instanceNo = this.dwuithread.getInstance();
+			if (instanceNo < 0) {
+				return(new DWCommandResponse(false, DWDefs.RC_INSTANCE_WONT, 
+					"No instance attached. Use 'ui instance attach <instance#' to attach to an instance first."));
 			}
-			else
-				return(new DWCommandResponse(false,DWDefs.RC_INSTANCE_WONT ,"The operation is not supported by this instance"));
+			if (!DriveWireServer.isValidHandlerNo(instanceNo)) {
+				return(new DWCommandResponse(false, DWDefs.RC_INVALID_HANDLER, 
+					"Invalid instance number: " + instanceNo));
+			}
+			if (!DriveWireServer.getHandler(instanceNo).hasVSerial()) {
+				return(new DWCommandResponse(false, DWDefs.RC_INSTANCE_WONT, 
+					"Instance " + instanceNo + " does not support virtual serial ports. " +
+					"Instance type: " + DriveWireServer.getHandler(instanceNo).getConfig().getString("Protocol", "unknown")));
+			}
+			gproto = (DWVSerialProtocol) DriveWireServer.getHandler(instanceNo);
 		}
 	
 		

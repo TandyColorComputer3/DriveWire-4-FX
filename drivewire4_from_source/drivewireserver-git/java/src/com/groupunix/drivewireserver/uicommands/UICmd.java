@@ -21,6 +21,8 @@ public class UICmd extends DWCommand
 		commands.addcommand(new UICmdServer(ct));
 		commands.addcommand(new UICmdSync(ct));
 		commands.addcommand(new UICmdTest(ct));
+		// Add "dw" as an alias for "instance" to support legacy command format
+		commands.addcommand(new UICmdDW(ct));
 	} 
 
 	
@@ -52,6 +54,9 @@ public class UICmd extends DWCommand
 			return(new DWCommandResponse(this.commands.getShortHelp()));
 		}
 		
+		// If command starts with "dw ", "instance ", "server ", "sync ", or "test ",
+		// it's already a subcommand, so parse it directly
+		// Otherwise, parse normally (which will look for "dw", "instance", etc. as commands)
 		return(commands.parse(cmdline));
 	}
 

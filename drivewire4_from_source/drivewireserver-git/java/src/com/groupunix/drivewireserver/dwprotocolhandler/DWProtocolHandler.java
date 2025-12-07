@@ -216,6 +216,12 @@ public class DWProtocolHandler implements Runnable, DWVSerialProtocol
 					{
 						opcodeint = protodev.comRead1(false);
 						
+						// Log when we get data (but only occasionally to avoid spam)
+						if (opcodeint > -1 && (total_ops % 100 == 0 || total_ops < 10))
+						{
+							logger.debug("handler #" + handlerno + ": read opcode " + opcodeint + " (0x" + Integer.toHexString(opcodeint) + ")");
+						}
+						
 					} 
 					catch (IOException e) 
 					{
@@ -224,6 +230,14 @@ public class DWProtocolHandler implements Runnable, DWVSerialProtocol
 					{
 						// this should not actually ever get thrown, since we call comRead1 with timeout = false..
 						logger.error("Timeout in proto read loop: "  + e.getMessage());
+					}
+				}
+				else if (protodev == null)
+				{
+					// Log occasionally when device is null (but not every iteration to avoid spam)
+					if (total_ops % 1000 == 0)
+					{
+						logger.warn("handler #" + handlerno + ": protocol device is null, cannot read opcodes");
 					}
 				}
 					
@@ -1676,11 +1690,22 @@ public class DWProtocolHandler implements Runnable, DWVSerialProtocol
 		else if (config.getString("DeviceType").equalsIgnoreCase("tcp") || config.getString("DeviceType").equalsIgnoreCase("tcp-server"))
 		{
 			// create TCP device
-			if (config.containsKey("TCPServerPort"))		
+			// Support both TCPServerPort and TCPDevicePort (for backward compatibility)
+			int tcpport = -1;
+			if (config.containsKey("TCPServerPort"))
+			{
+				tcpport = config.getInt("TCPServerPort");
+			}
+			else if (config.containsKey("TCPDevicePort"))
+			{
+				tcpport = config.getInt("TCPDevicePort");
+			}
+			
+			if (tcpport > 0)
 			{
 				try 
 				{
-					protodev = new DWTCPDevice(this.handlerno, config.getInt("TCPServerPort"));
+					protodev = new DWTCPDevice(this.handlerno, tcpport);
 				} 
 				catch (IOException e) 
 				{
@@ -1690,7 +1715,7 @@ public class DWProtocolHandler implements Runnable, DWVSerialProtocol
 			}	
 			else
 			{
-				logger.error("TCP server mode requires TCPServerPort to be set, cannot use this configuration");
+				logger.error("TCP server mode requires TCPServerPort or TCPDevicePort to be set, cannot use this configuration");
 				//wanttodie = true;
 			}
 			

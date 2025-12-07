@@ -25,6 +25,9 @@ public class DWCmd extends DWCommand
 		commands.addcommand(new DWCmdLog(dwProtocol, this));
 		commands.addcommand(new DWCmdInstance(dwProtocol, this));
 		
+		// Add help as a top-level command (alias for dw server help)
+		commands.addcommand(new DWCmdServerHelp(dwProtocol, this));
+		
 		if (this.dwProto.hasDisks())
 			commands.addcommand(new DWCmdDisk((DWProtocolHandler) dwProtocol, this));
 		

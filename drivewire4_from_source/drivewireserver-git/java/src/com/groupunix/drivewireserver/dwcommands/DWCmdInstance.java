@@ -14,6 +14,7 @@ public class DWCmdInstance extends DWCommand {
 		this.dwProto = dwProto;
 		commands = new DWCommandList(this.dwProto, this.dwProto.getCMDCols());
 		commands.addcommand(new DWCmdInstanceShow(dwProto,this));
+		commands.addcommand(new DWCmdInstanceStatus(dwProto,this));
 		commands.addcommand(new DWCmdInstanceStart(dwProto,this));
 		commands.addcommand(new DWCmdInstanceStop(dwProto,this));
 		commands.addcommand(new DWCmdInstanceRestart(dwProto,this));

@@ -11,6 +11,7 @@ import com.groupunix.drivewireserver.dwcommands.DWCommand;
 import com.groupunix.drivewireserver.dwcommands.DWCommandResponse;
 import com.groupunix.drivewireserver.dwexceptions.DWDriveNotLoadedException;
 import com.groupunix.drivewireserver.dwexceptions.DWDriveNotValidException;
+import com.groupunix.drivewireserver.dwprotocolhandler.DWProtocol;
 import com.groupunix.drivewireserver.dwprotocolhandler.DWProtocolHandler;
 
 public class UICmdInstanceDiskShow extends DWCommand {
@@ -45,8 +46,13 @@ public class UICmdInstanceDiskShow extends DWCommand {
 		// TODO hackish!
 		if (this.dwProto == null)
 		{
-			if (DriveWireServer.getHandler(this.uiref.getInstance()).hasDisks())
-				dwProto = (DWProtocolHandler) DriveWireServer.getHandler(this.uiref.getInstance());
+			DWProtocol handler = DriveWireServer.getHandler(this.uiref.getInstance());
+			if (handler == null)
+			{
+				return(new DWCommandResponse(false, DWDefs.RC_INSTANCE_NOT_READY, "Instance " + this.uiref.getInstance() + " does not exist. Valid instances: 0-" + (DriveWireServer.getNumHandlers() - 1)));
+			}
+			if (handler.hasDisks())
+				dwProto = (DWProtocolHandler) handler;
 			else
 				return(new DWCommandResponse(false,DWDefs.RC_INSTANCE_WONT ,"This operation is not supported on this type of instance"));
 		}

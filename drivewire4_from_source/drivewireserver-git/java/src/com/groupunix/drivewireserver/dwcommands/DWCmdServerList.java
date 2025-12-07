@@ -42,7 +42,8 @@ public class DWCmdServerList extends DWCommand {
 	{
 		if (cmdline.length() == 0)
 		{
-			return(new DWCommandResponse(false,DWDefs.RC_SYNTAX_ERROR,"dw server list requires a URI or local file path as an argument"));
+			// Show usage instead of error when no argument provided
+			return(new DWCommandResponse("Usage: " + getUsage() + "\n\n" + getShortHelp() + "\n\nExample: dw server list file:///C:/path/to/file.txt"));
 		}
 		return(doList(cmdline));
 	}

@@ -73,13 +73,19 @@ public class SyncThread implements Runnable
 			// change/establish connection
 			String currentHost = MainWin.getHost();
 			int currentPort = MainWin.getPort();
+			// Normalize port: if 0 or invalid, use default
+			if (currentPort <= 0) {
+				currentPort = MainWin.default_Port;
+			}
+			// Normalize this.port too for comparison
+			int normalizedThisPort = (this.port <= 0) ? MainWin.default_Port : this.port;
 			
 			// Check if we need to connect/reconnect
 			// Need connection if: host is null, host changed, port changed, or socket is null
 			boolean needConnection = (currentHost == null) || 
 			                        (this.host == null) ||
 			                        !currentHost.equals(this.host) || 
-			                        (currentPort != this.port) || 
+			                        (currentPort != normalizedThisPort) || 
 			                        (this.sock == null);
 			
 			System.out.println("SyncThread: Connection check - currentHost=" + currentHost + ", this.host=" + this.host + ", currentPort=" + currentPort + ", this.port=" + this.port + ", sock=" + (this.sock == null ? "null" : "connected") + ", needConnection=" + needConnection);
@@ -105,6 +111,12 @@ public class SyncThread implements Runnable
 				
 				this.host = MainWin.getHost();
 				this.port = MainWin.getPort();
+				// Fix: If port is 0 or invalid, use default port 6800
+				if (this.port <= 0) {
+					this.port = MainWin.default_Port;
+					System.out.println("SyncThread: Port was 0, using default port " + this.port);
+					System.err.println("SyncThread: Port was 0, using default port " + this.port);
+				}
 				System.out.println("SyncThread: Set host=" + this.host + ", port=" + this.port);
 				System.err.println("SyncThread: Set host=" + this.host + ", port=" + this.port);
 				System.out.flush();
@@ -207,7 +219,12 @@ public class SyncThread implements Runnable
 				    catch (Exception e)
 					{
 						// Don't care - disk info is optional and can timeout
+						// This is often a server-side bug (NullPointerException in UICmdInstanceDiskShow)
+						// Suppress stack trace to reduce console noise - error is already logged
 						System.out.println("SyncThread: Disk info load failed (non-fatal): " + e.getClass().getSimpleName() + " - " + e.getMessage());
+						if (MainWin.debugging) {
+							e.printStackTrace();
+						}
 						MainWin.debug("Sync: loading disk info failed");
 					}
 				    

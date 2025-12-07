@@ -111,12 +111,90 @@ public class DWVPortTCPListenerThread implements Runnable
 					logger.error("HTTP MODE NO LONGER SUPPORTED");
 			
 				}
-				else
+			else
+			{
+				// For raw DriveWire connections (like HDB-DOS), skip telnet preflight and add connection directly
+				// Telnet preflight interferes with raw DriveWire protocol
+				if (this.do_telnet || this.do_banner)
 				{
 					// run telnet preflight, let it add the connection to the pool if things work out
 					Thread pfthread = new Thread(new DWVPortTelnetPreflightThread(this.dwProto, this.vport, skt, this.do_telnet, this.do_banner));
 					pfthread.start();
 				}
+				else
+				{
+					// Raw DriveWire connection - add directly to pool without telnet negotiation
+					logger.debug("Adding raw DriveWire connection directly to pool (no telnet preflight)");
+					try
+					{
+						int conno = this.dwVSerialPorts.getListenerPool().addConn(this.vport, skt, mode);
+						if (conno < 0)
+						{
+							logger.error("Connection pool full, cannot add raw connection for port " + this.vport);
+							skt.close();
+							continue; // Skip to next connection
+						}
+						
+						// Start the TCP server thread to handle data flow for this connection
+						// This thread reads from TCP socket and writes to virtual serial port (and vice versa)
+						try
+						{
+							logger.info("Starting TCP server thread for raw DriveWire connection #" + conno + " on port " + this.vport);
+							DWVPortTCPServerThread serverThread = new DWVPortTCPServerThread(this.dwProto, this.vport, conno);
+							Thread tcpServerThread = new Thread(serverThread);
+							tcpServerThread.setDaemon(true);
+							tcpServerThread.setName("tcpserv-raw-" + conno);
+							tcpServerThread.start();
+							logger.info("Started TCP server thread for raw DriveWire connection #" + conno + " (thread: " + tcpServerThread.getName() + ")");
+						}
+						catch (Exception serverThreadEx)
+						{
+							logger.error("Failed to start TCP server thread for connection #" + conno + ": " + serverThreadEx.getMessage(), serverThreadEx);
+							// Clean up the connection if we can't start the handler
+							try {
+								skt.close();
+								this.dwVSerialPorts.getListenerPool().clearConn(conno);
+							} catch (Exception cleanupEx) {
+								logger.error("Error cleaning up failed connection: " + cleanupEx.getMessage());
+							}
+							continue; // Skip to next connection
+						}
+						
+						// Only send announcement if we have valid socket info and port handler is initialized
+						// Announcement is optional - connection will work without it
+						try
+						{
+							if (skt.socket() != null && skt.socket().getInetAddress() != null)
+							{
+								this.dwVSerialPorts.sendConnectionAnnouncement(this.vport, conno, skt.socket().getLocalPort(), skt.socket().getInetAddress().getHostAddress());
+								logger.info("Raw DriveWire connection added: connection #" + conno + " from " + skt.socket().getInetAddress().getHostAddress());
+							}
+							else
+							{
+								logger.info("Raw DriveWire connection added: connection #" + conno + " (socket info unavailable)");
+							}
+						}
+						catch (Exception annEx)
+						{
+							// Announcement failed but connection is still valid - log and continue
+							logger.debug("Could not send connection announcement (port handler may not be initialized): " + annEx.getMessage());
+							logger.info("Raw DriveWire connection added: connection #" + conno + " from " + (skt.socket() != null && skt.socket().getInetAddress() != null ? skt.socket().getInetAddress().getHostAddress() : "unknown"));
+						}
+					}
+					catch (Exception e)
+					{
+						logger.error("Error adding raw connection: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+						try {
+							if (skt.isOpen() && skt.isConnected())
+							{
+								skt.close();
+							}
+						} catch (IOException e1) {
+							logger.error("Error closing socket: " + e1.getMessage());
+						}
+					}
+				}
+			}
 			
 			
 			}

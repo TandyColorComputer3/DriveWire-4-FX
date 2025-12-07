@@ -311,7 +311,12 @@ public class DriveWireServer
         catch (ConfigurationException e1) 
     	{
     		logger.fatal(e1.getMessage());
-    		System.exit(-1);
+    		// Don't exit if running as part of UI - let UI handle it
+    		if (System.getProperty("drivewire.ui.mode") == null) {
+    		    System.exit(-1);
+    		} else {
+    		    throw new RuntimeException("Configuration error: " + e1.getMessage(), e1);
+    		}
 		}
 
         
@@ -330,7 +335,12 @@ public class DriveWireServer
 		{
 			logger.fatal("UseRXTX is set, but RXTX native libraries could not be loaded");
 			logger.fatal("Please see http://sourceforge.net/apps/mediawiki/drivewireserver/index.php?title=Installation");
-			System.exit(-1);
+			// Don't exit if running as part of UI - let UI handle it
+			if (System.getProperty("drivewire.ui.mode") == null) {
+			    System.exit(-1);
+			} else {
+			    logger.warn("RXTX not available but continuing in UI mode");
+			}
 		}
 
     	// add server config listener
@@ -551,10 +561,20 @@ public class DriveWireServer
 			System.setProperty("java.library.path", System.getProperty("java.library.path") + File.pathSeparator + rxtxpath);
 		    
 			//set sys_paths to null so they will be reread by jvm
-			Field sysPathsField;
-			sysPathsField = ClassLoader.class.getDeclaredField("sys_paths");
-			sysPathsField.setAccessible(true);
-		    sysPathsField.set(null, null);
+			// Note: In Java 9+, this field access may be restricted by module system
+			// If it fails, the library path should still work via System.setProperty
+			try {
+				Field sysPathsField = ClassLoader.class.getDeclaredField("sys_paths");
+				sysPathsField.setAccessible(true);
+				sysPathsField.set(null, null);
+			} catch (NoSuchFieldException e) {
+				// Field may not exist or be accessible in this Java version
+				// System.setProperty should be sufficient for most cases
+				logger.debug("Could not reset sys_paths field (may not be accessible in this Java version): " + e.getMessage());
+			} catch (Exception e) {
+				// Other access issues - log but don't fail
+				logger.debug("Could not reset sys_paths field: " + e.getMessage());
+			}
 			
 		} 
 		catch (Exception e) 

@@ -12,6 +12,7 @@ import org.apache.log4j.Logger;
 import com.groupunix.drivewireserver.dwcommands.DWCmd;
 import com.groupunix.drivewireserver.dwcommands.DWCommandList;
 import com.groupunix.drivewireserver.dwcommands.DWCommandResponse;
+import com.groupunix.drivewireserver.dwprotocolhandler.DWProtocol;
 import com.groupunix.drivewireserver.uicommands.UICmd;
 
 public class DWUIClientThread implements Runnable {
@@ -46,6 +47,8 @@ public class DWUIClientThread implements Runnable {
 		
 		commands = new DWCommandList(null);
 		commands.addcommand(new UICmd(this));
+		// Note: "dw" command is added automatically when instance is attached via setInstance()
+		// via DWCmd class, so we don't need to add UICmdDW here
 		
 	}
 
@@ -171,8 +174,13 @@ public class DWUIClientThread implements Runnable {
 		// strip instance 
 		cmd = cmd.substring(div+1);
 		
-		if (DriveWireServer.serverconfig.getBoolean("LogUIConnections", false))
-			logger.debug("UI command '" + cmd + "' for instance " + this.instance);
+		// Log command and verify DWCmd is available
+		logger.info("UI command '" + cmd + "' for instance " + this.instance);
+		if (this.commands.validate("dw")) {
+			logger.debug("DWCmd is available in command list");
+		} else {
+			logger.warn("DWCmd is NOT available in command list! Available commands: " + this.commands.getShortHelp());
+		}
 		
 		// wait for server/instance ready
 		int waits = 0;
@@ -267,8 +275,29 @@ public class DWUIClientThread implements Runnable {
 		// valid instances get a dw cmd mapping
 		if (DriveWireServer.isValidHandlerNo(handler))
 		{
-			if (!this.commands.validate("dw"))
-				this.commands.addcommand(new DWCmd(DriveWireServer.getHandler(handler)));
+			// Always add DWCmd for valid instances
+			// Note: Adding multiple times creates duplicates, but command parser uses first match
+			// So we always add it to ensure it's available for the current instance
+			try {
+				DWProtocol proto = DriveWireServer.getHandler(handler);
+				if (proto != null) {
+					DWCmd dwCmd = new DWCmd(proto);
+					this.commands.addcommand(dwCmd);
+					// Always log for debugging
+					logger.info("Added DWCmd for instance " + handler + " (command: " + dwCmd.getCommand() + ")");
+					logger.debug("Current commands: " + this.commands.getShortHelp());
+				} else {
+					logger.error("DriveWireServer.getHandler(" + handler + ") returned null");
+				}
+			} catch (Exception e) {
+				logger.error("Error adding DWCmd for instance " + handler + ": " + e.getMessage(), e);
+				e.printStackTrace();
+			}
+		}
+		else
+		{
+			// Invalid instance - log for debugging
+			logger.warn("Attempted to set invalid instance: " + handler + ". Valid instances: 0-" + (DriveWireServer.getNumHandlers() - 1));
 		}
 	}
 

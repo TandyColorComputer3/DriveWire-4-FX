@@ -26,6 +26,7 @@ public class DWVPortListenerPool {
 		
 		logger.debug("add connection entry for port " + port + " mode " + mode);
 		
+		// First pass: look for null slots
 		for (int i = 0; i< MAX_CONN;i++)
 		{
 			if (sockets[i] == null)
@@ -34,6 +35,41 @@ public class DWVPortListenerPool {
 				modes[i] = mode;
 				socket_ports[i] = port;
 				return(i);
+			}
+		}
+		
+		// Second pass: look for closed/stale connections and reuse their slots
+		for (int i = 0; i< MAX_CONN;i++)
+		{
+			if (sockets[i] != null)
+			{
+				try
+				{
+					// Check if socket is closed or not connected
+					if (!sockets[i].isOpen() || !sockets[i].isConnected())
+					{
+						logger.debug("Reusing slot " + i + " for closed/stale connection");
+						clearConn(i);
+						sockets[i] = sktchan;
+						modes[i] = mode;
+						socket_ports[i] = port;
+						return(i);
+					}
+				}
+				catch (Exception e)
+				{
+					// Socket is in bad state, clear it
+					logger.debug("Clearing bad socket in slot " + i + ": " + e.getMessage());
+					try {
+						clearConn(i);
+					} catch (DWConnectionNotValidException e1) {
+						// Already cleared or invalid, continue
+					}
+					sockets[i] = sktchan;
+					modes[i] = mode;
+					socket_ports[i] = port;
+					return(i);
+				}
 			}
 		}
 		
@@ -145,9 +181,13 @@ public class DWVPortListenerPool {
 	
 	public void clearConn(int conno) throws DWConnectionNotValidException
 	{
-		validateConn(conno);
-		sockets[conno] = null;
-		socket_ports[conno] = -1;
+		// Don't validate - allow clearing even if already null (for cleanup)
+		if (conno >= 0 && conno < MAX_CONN)
+		{
+			sockets[conno] = null;
+			socket_ports[conno] = -1;
+			modes[conno] = 0;
+		}
 	}
 
 	public void clearListener(int conno)

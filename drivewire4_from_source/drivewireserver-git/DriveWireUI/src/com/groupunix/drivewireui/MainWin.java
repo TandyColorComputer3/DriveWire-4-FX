@@ -2668,7 +2668,15 @@ public class MainWin {
                         }
                     }
 
-                    Connection connection = new Connection(host, port, instance);
+                        // Fix: Use default port if port is 0 or invalid
+                        int usePort = (port > 0) ? port : default_Port;
+                        // Fix: Use instance 0 if current instance is invalid (server only has instance 0)
+                        int useInstance = instance;
+                        if (useInstance < 0 || useInstance > 0) {
+                            // Default to instance 0 if instance is invalid
+                            useInstance = 0;
+                        }
+                        Connection connection = new Connection(host, usePort, useInstance);
 
                     try {
                         connection.Connect();
@@ -2679,22 +2687,100 @@ public class MainWin {
                             }
                         }
 
-                        connection.sendCommand(tid, cmd, instance, markComplete);
+                        // Get response and display it
+                        java.util.List<String> resp = connection.loadList(useInstance, cmd);
+                        
+                        // Check for FAIL response
+                        if ((resp.size() > 0) && (resp.get(0).startsWith("FAIL"))) {
+                            String errorMsg = resp.get(0).trim();
+                            // Display error in JavaFX UI
+                            if (MainWin.mainWindowController != null) {
+                                try {
+                                    java.lang.reflect.Method appendMethod = MainWin.mainWindowController.getClass().getMethod("appendCommandHistory", String.class);
+                                    appendMethod.invoke(MainWin.mainWindowController, errorMsg);
+                                } catch (Exception e) {
+                                    System.err.println("Command error: " + errorMsg);
+                                }
+                            }
+                            throw new DWUIOperationFailedException(errorMsg);
+                        }
+                        
+                        // Display successful response in JavaFX UI
+                        if (MainWin.mainWindowController != null) {
+                            try {
+                                java.lang.reflect.Method appendMethod = MainWin.mainWindowController.getClass().getMethod("appendCommandHistory", String.class);
+                                String responseText = "";
+                                for (String line : resp) {
+                                    if (!line.trim().isEmpty()) {
+                                        responseText += line + "\n";
+                                    }
+                                }
+                                if (!responseText.isEmpty()) {
+                                    appendMethod.invoke(MainWin.mainWindowController, responseText.trim());
+                                }
+                            } catch (Exception e) {
+                                // Fallback: log to console
+                                System.err.println("Command response: " + resp);
+                            }
+                        }
+                        
+                        // Also update taskman if available
+                        if (markComplete) {
+                            if (MainWin.taskman != null) {
+                                String txt = "";
+                                for (int i = 0; i < resp.size(); i++) {
+                                    txt += resp.get(i) + "\n";
+                                }
+                                if ((resp.size() > 0) && (resp.get(0).startsWith("FAIL"))) {
+                                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, txt);
+                                } else {
+                                    MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_COMPLETE, txt);
+                                }
+                            }
+                        }
+                        
                         connection.close();
 
                     } catch (UnknownHostException e) {
+                        String errorMsg = e.getMessage() + " You may have a DNS problem, or the server hostname may not be specified correctly.";
                         if (MainWin.taskman != null) {
-                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e.getMessage() + " You may have a DNS problem, or the server hostname may not be specified correctly.");
+                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, errorMsg);
+                        }
+                        // Display error in JavaFX UI
+                        if (MainWin.mainWindowController != null) {
+                            try {
+                                java.lang.reflect.Method appendMethod = MainWin.mainWindowController.getClass().getMethod("appendCommandHistory", String.class);
+                                appendMethod.invoke(MainWin.mainWindowController, "ERROR: " + errorMsg);
+                            } catch (Exception ex) {
+                                System.err.println("Command error: " + errorMsg);
+                            }
                         }
                     } catch (IOException e1) {
-                        // UIUtils.getStackTrace(e1)
+                        String errorMsg = e1.getMessage() + " You may have a connectivity problem, or the server may not be running.";
                         if (MainWin.taskman != null) {
-                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e1.getMessage() + " You may have a connectivity problem, or the server may not be running.");
+                            MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, errorMsg);
                         }
-
+                        // Display error in JavaFX UI
+                        if (MainWin.mainWindowController != null) {
+                            try {
+                                java.lang.reflect.Method appendMethod = MainWin.mainWindowController.getClass().getMethod("appendCommandHistory", String.class);
+                                appendMethod.invoke(MainWin.mainWindowController, "ERROR: " + errorMsg);
+                            } catch (Exception ex) {
+                                System.err.println("Command error: " + errorMsg);
+                            }
+                        }
                     } catch (DWUIOperationFailedException e2) {
                         if (MainWin.taskman != null) {
                             MainWin.taskman.updateTask(tid, UITaskMaster.TASK_STATUS_FAILED, e2.getMessage());
+                        }
+                        // Display error in JavaFX UI
+                        if (MainWin.mainWindowController != null) {
+                            try {
+                                java.lang.reflect.Method appendMethod = MainWin.mainWindowController.getClass().getMethod("appendCommandHistory", String.class);
+                                appendMethod.invoke(MainWin.mainWindowController, "FAIL: " + e2.getMessage());
+                            } catch (Exception ex) {
+                                System.err.println("Command error: " + e2.getMessage());
+                            }
                         }
                     }
                 }
@@ -2828,7 +2914,8 @@ public class MainWin {
     }
 
     public static int getPort() {
-        return port;
+        // Fix: Return default port if port is 0 or invalid
+        return (port > 0) ? port : default_Port;
     }
 
     public static int getInstance() {
@@ -3363,25 +3450,41 @@ public class MainWin {
         }
 
         // update disk table - this is the main update path
+        // ALWAYS update the table, even if value is "0" - this ensures reads/writes are always displayed
         if (MainWin.diskTableUpdater != null) {
             MainWin.diskTableUpdater.addUpdate(disk, key, val);
-            System.out.println("Added update to diskTableUpdater: disk=" + disk + ", key=" + key);
+            System.out.println("submitDiskEvent: Added update to diskTableUpdater: disk=" + disk + ", key=" + key + ", val=" + val);
         } else {
-            System.err.println("ERROR: diskTableUpdater is null! Cannot update disk table.");
+            System.err.println("ERROR: diskTableUpdater is null! Cannot update disk table for disk=" + disk + ", key=" + key);
         }
 
-        if (key.equals("_reads") && !val.equals("0")) {
-            // LED state: 1 = green
-            if (MainWin.diskTableUpdater != null) {
-                MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(1));
+        // Update LED based on reads/writes activity (original behavior)
+        if (key.equals("_reads")) {
+            try {
+                int readsValue = Integer.parseInt(val);
+                if (readsValue > 0) {
+                    // LED state: 1 = green for read activity
+                    if (MainWin.diskTableUpdater != null) {
+                        MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(1));
+                    }
+                    MainWin.driveactivity = true;
+                }
+            } catch (NumberFormatException e) {
+                // Ignore invalid values
             }
-            MainWin.driveactivity = true;
-        } else if (key.equals("_writes") && !val.equals("0")) {
-            // LED state: 2 = red
-            if (MainWin.diskTableUpdater != null) {
-                MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(2));
+        } else if (key.equals("_writes")) {
+            try {
+                int writesValue = Integer.parseInt(val);
+                if (writesValue > 0) {
+                    // LED state: 2 = red for write activity
+                    if (MainWin.diskTableUpdater != null) {
+                        MainWin.diskTableUpdater.addUpdate(disk, "LED", Integer.valueOf(2));
+                    }
+                    MainWin.driveactivity = true;
+                }
+            } catch (NumberFormatException e) {
+                // Ignore invalid values
             }
-            MainWin.driveactivity = true;
         } else if (key.equals("*insert") || key.equals("*eject")) {
             // Reset LED to dark (0) when disk is inserted or ejected
             if (MainWin.diskTableUpdater != null) {
