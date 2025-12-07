@@ -42,7 +42,11 @@ public class DWTCPDevice implements DWProtocolDevice {
 			srvr = new ServerSocket(this.tcpport, 0);
 		}
 		
-		logger.info("listening on port " + srvr.getLocalPort());
+		// CRITICAL: Set initial timeout on ServerSocket to prevent blocking on first accept()
+		// This ensures the protocol handler loop can start immediately without waiting for a client
+		srvr.setSoTimeout(5000);
+		
+		logger.info("listening on port " + srvr.getLocalPort() + " (with 5-second accept timeout)");
 		
 	}
 
@@ -108,11 +112,8 @@ public class DWTCPDevice implements DWProtocolDevice {
 		
 		if (skt == null)
 		{
-			// Try to get a connection, but don't block indefinitely
-			// Use a timeout to allow the protocol handler loop to continue
 			getClientConnection();
 			
-			// If still no connection after timeout, return -1 to allow loop to continue
 			if (skt == null)
 			{
 				return -1;
@@ -137,39 +138,15 @@ public class DWTCPDevice implements DWProtocolDevice {
 			{
 				try 
 				{
-					// Log when we're about to read (first few times to confirm the handler is active)
-					if (totalBytesRead < 5)
-					{
-						logger.info("About to read from TCP device (blocking call, waiting for data from client)...");
-					}
-					
-					// Check if data is available before reading (non-blocking check)
-					int available = skt.getInputStream().available();
-					if (totalBytesRead < 5)
-					{
-						logger.info("Bytes available: " + available);
-					}
-					
-					// Always try to read (blocking call - will wait for data)
 					data = skt.getInputStream().read();
 					
 					if (bytelog)
 						logger.debug("TCPREAD: " + data + " (0x" + Integer.toHexString(data) + ")");
-					else if (data >= 0 && data < 256) // Log first few bytes to help diagnose
-					{
-						// Log first 20 bytes received to help diagnose connection issues
-						if (totalBytesRead < 20)
-						{
-							logger.info("TCPREAD (first bytes): " + data + " (0x" + Integer.toHexString(data) + ") - total bytes read: " + (totalBytesRead + 1));
-							totalBytesRead++;
-						}
-					}
 				} 
 				catch (IOException e) 
 				{
 					logger.warn("IOException reading from TCP device: " + e.getMessage());
 					closeClient();
-					// Return -1 to indicate no data available, don't recurse
 					return -1;
 				}
 				
@@ -178,7 +155,6 @@ public class DWTCPDevice implements DWProtocolDevice {
 					// EOF - client disconnected
 					logger.info("Client disconnected (EOF), closing connection");
 					closeClient();
-					// Return -1 instead of recursing to avoid infinite loop
 					return -1;
 				}
 			}
@@ -271,35 +247,44 @@ public class DWTCPDevice implements DWProtocolDevice {
 
 	private void getClientConnection()
 	{
-		// Only log once per connection attempt, not on every retry
-		// Use a static flag or check if we've logged recently
+		// Only log once when first waiting for connection
 		if (skt == null) {
-			logger.info("Waiting for client connection on port " + this.tcpport + "...");
+			logger.debug("Waiting for client connection on port " + this.tcpport + "...");
 		}
 		
 		try 
 		{
-			// Set a timeout on the ServerSocket to prevent indefinite blocking
-			// This allows the protocol handler loop to continue and check other conditions
-			// Use a longer timeout (5 seconds) to avoid interfering with normal connections
-			// but still allow the handler to continue if no client connects
-			srvr.setSoTimeout(5000); // 5 second timeout
+			// MANDATORY: Ensure 5-second timeout is set on accept() to prevent blocking protocol handler loop
+			// This is CRITICAL - without it, accept() blocks indefinitely and breaks connection flow
+			// The timeout is already set in constructor, but ensure it's still set (in case it was reset)
+			if (srvr.getSoTimeout() != 5000) {
+				srvr.setSoTimeout(5000);  // 5 seconds - REQUIRED
+			}
 			skt = srvr.accept();
-			// Reset timeout after accepting (or it will timeout on next accept)
-			srvr.setSoTimeout(0); // Remove timeout after connection established
+			// Keep timeout at 5000 for next connection attempt (if client disconnects)
+			// This ensures we never block on accept() - CRITICAL for protocol handler loop
+			srvr.setSoTimeout(5000);
 		} 
 		catch (java.net.SocketTimeoutException e)
 		{
-			// Timeout is expected - no client connected yet, return and let the loop continue
-			// Don't log this as it happens frequently - only log at debug level
+			// Timeout is expected - no client connected yet, return and let loop continue
+			// Debug level, NOT error - this happens frequently during normal operation
 			logger.debug("No client connection yet on port " + this.tcpport + ", will retry...");
-			skt = null; // Ensure skt is null if timeout occurs
+			skt = null;
+			// Timeout is already set to 5000, no need to reset
+			// This allows the protocol handler loop to continue without blocking
 			return;
 		}
 		catch (IOException e1) 
 		{
 			logger.error("IO error while listening for client: " + e1.getMessage());
-			skt = null; // Ensure skt is null on other IO errors
+			skt = null;
+			// Reset timeout on error to ensure next attempt works
+			try {
+				srvr.setSoTimeout(5000);
+			} catch (SocketException se) {
+				logger.debug("Failed to reset ServerSocket timeout: " + se.getMessage());
+			}
 			return;
 		}
 		
@@ -314,8 +299,7 @@ public class DWTCPDevice implements DWProtocolDevice {
 			try 
 			{
 				skt.setTcpNoDelay(true);
-				skt.setSoTimeout(0); // No read timeout - block until data arrives
-				logger.info("TCP socket configured: NoDelay=true, SoTimeout=0");
+				skt.setSoTimeout(0);  // Blocking reads after connection - REQUIRED
 			} 
 			catch (SocketException e) 
 			{

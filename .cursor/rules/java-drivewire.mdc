@@ -1,0 +1,195 @@
+---
+alwaysApply: true
+---
+## Core Capabilities
+
+### A) Java 8 → 11/17/21 Migration
+
+* **Language & APIs:** `var`, records, text blocks, pattern matching, switch expressions, sealed classes (where justified).
+* **Build/Deps:** Maven/Gradle toolchains, multi-release JARs, optional JPMS, shading/relocation for split-packages.
+* **JDK removals:** JAXB/JAX-WS/Activation/CORBA replacements; adopt `java.net.http`; Flight Recorder/JMC.
+* **Perf/Concurrency:** `CompletableFuture`, structured concurrency patterns, **virtual threads** (Java 21) where appropriate, G1/ZGC/Shenandoah selection.
+* **Security/TLS:** modern ciphers, ALPN/HTTP/2, keystore formats, strong encapsulation (`--add-opens`) mitigation, CDS.
+* **Testing:** JUnit 4→5, Testcontainers, deterministic integration tests.
+
+### B) DriveWire Protocol Integration (PC ↔ CoCo)
+
+* **Transport:** Cross-platform serial (Windows COMx, macOS `/dev/tty.*`, Linux `/dev/ttyUSB*`). Prefer **jSerialComm**; abstract behind interface for mocks.
+* **Protocol:** Frame encode/decode, state machine, timeouts/retries, backpressure for long transfers, hex-trace logging at TRACE only.
+* **Features:** Virtual disk & file I/O proxies, printer passthrough, multi-channel handlers via pluggable commands.
+* **Robustness:** Watchdogs, heartbeat, resume on transient disconnects, CRC/checksums if defined, bounded queues, graceful shutdown.
+* **Interop:** Tunable pacing/latency for CoCo; “safe mode” for marginal cables/interfaces.
+
+### C) **JavaFX Modernization** (SWT/Swing → JavaFX)
+
+* **Architecture:** MVVM (preferred) or MVC; FXML + **Controller** classes; **CSS** for theming; **Observable** models & bindings; dependency injection (e.g., Guice/Spring, or lightweight manual injection).
+* **Component Mapping:** Replace SWT Shell/Dialog/Canvas with JavaFX Stage/Dialog/Canvas; SWT Table → TableView; SWT Composite → Pane (VBox/HBox/GridPane); SWT Browser → WebView; SWT Image → javafx.scene.image.Image.
+* **Critical Migration Lessons (SWT → JavaFX):**
+  * **GrapherThread Issue:** SWT-dependent threads (like `GrapherThread` using `org.eclipse.swt.*`) will fail in JavaFX mode. Replace with JavaFX `Canvas` + `GraphicsContext` for custom drawing. Use `WritableImage` instead of SWT `Image`.
+  * **Display.getDisplay() Conflicts:** SWT `Display` and JavaFX `Platform` cannot coexist. Check for JavaFX mode before starting SWT-dependent threads: `if (System.getProperty("drivewire.ui.mode") == null) { /* SWT code */ }`
+  * **System.exit() Prevention:** Set `System.setProperty("drivewire.ui.mode", "true")` before server initialization to prevent `DriveWireServer` from calling `System.exit()` and killing the JavaFX application.
+  * **Threading:** All UI updates on FX thread (`Platform.runLater()`); isolate serial I/O & DW processing on executors / virtual threads; communicate via `ObservableValue`, `Task`, or reactive streams.
+  * **Canvas Drawing:** Use `javafx.scene.canvas.Canvas` with `GraphicsContext` for custom graphics. Draw on background thread, update via `Platform.runLater()`.
+* **Interop (when incremental):** Avoid mixing SWT and JavaFX in same process—they conflict. Complete migration is preferred.
+* **UX/Visual:** HiDPI scaling, responsive resizable layouts (VBox/HBox/GridPane/BorderPane), keyboard shortcuts, accessibility roles, i18n (ResourceBundle), modern CSS with gradients/animations.
+* **Ecosystem:** **ControlsFX**, **RichTextFX**, **Ikonli**, **Gluon Scenic View** (debug), **Scene Builder** for FXML design.
+* **Packaging:** Since Java 11, JavaFX is decoupled—add Maven/Gradle JavaFX modules; ship with **jpackage** (native installers, app image) or **jlink** (custom runtime) + macOS notarization notes.
+* **Styling & Branding:** Central CSS theme with modern design (gradients, shadows, smooth transitions); dark/light modes; icon sets via SVG/Ikonli; splash/about screens.
+* **Telemetry/Errors:** SLF4J logging; capture UI errors; non-blocking error banners; user-visible status toasts for serial link state.
+
+---
+
+## How You Work
+
+* **Evidence-driven:** No guessing on DW; request spec or frame captures when unclear.
+* **Small, reversible steps:** 1) Build on current JDK → 2) dep updates → 3) toolchain bump → 4) language/API modernization → 5) optional JPMS → 6) perf pass → 7) UI migration (screen-by-screen).
+* **Compatibility first:** Default runtime 11/17; adopt 21 features when guaranteed and beneficial.
+* **Observability:** Structured logs (SLF4J), hex dump toggles, Micrometer metrics, feature flags for risky changes.
+
+---
+
+## Deliverables (Default Output Style)
+
+* **Migration Readiness Report:** removed APIs, risky deps, stepwise plan with effort/impact.
+* **Build Files:** Updated Maven/Gradle (toolchains; CI matrix for 11/17/21).
+* **DriveWire SDK Module:** `spi-transport` (serial), `core-protocol` (frames/commands), `dw-client` (high-level ops), test fakes, golden-frame tests.
+* **JavaFX UI Kit:**
+
+  * **FXML** views + controllers, MVVM view-models, binding plan
+  * **CSS theme** & icon strategy (Ikonli)
+  * Component mapping table (Old Swing → New JavaFX)
+  * Navigation shell (menu/toolbar/status bar, docking if needed)
+* **Config Examples:** `application.properties` for serial port/baud/flow/pacing/timeouts; UI theme toggles.
+* **Test Harness:** CLI for DW ops + a JavaFX **Diagnostics Window** (port list, connect, live frame meter, error panel).
+* **Operational Runbook:** Serial permissions (dialout/uucp), macOS notarization for JavaFX app, Windows driver notes, recovery steps.
+
+---
+
+## Guardrails
+
+* Don't introduce features (records/virtual threads) unless the target JDK supports them in production.
+* Avoid JPMS unless it brings real value and dependency graph cooperates.
+* **Never block the JavaFX Application Thread.** All serial/protocol work off-FX; UI marshaled via `Platform.runLater`, `Task`, or bindings.
+* Binary protocol parsers must be **total** (explicit invalid/unknown handling) and fuzz-tested.
+* For interop phases, keep Swing/FX bridges localized; set an **exit plan** to remove bridging once converted.
+
+---
+
+## DriveWire TCP Device Connection Handling (CRITICAL)
+
+### DWTCPDevice.getClientConnection() Requirements
+
+**MANDATORY**: `ServerSocket.accept()` MUST have a 5-second timeout to prevent blocking the protocol handler loop.
+
+**Required Implementation:**
+
+1. **Set timeout in constructor (CRITICAL):**
+```java
+public DWTCPDevice(int handlerno, int tcpport) throws IOException {
+    // ... create ServerSocket ...
+    srvr.setSoTimeout(5000);  // Set timeout immediately - REQUIRED
+    logger.info("listening on port " + srvr.getLocalPort() + " (with 5-second accept timeout)");
+}
+```
+
+2. **In getClientConnection(), ensure timeout is set and KEEP IT:**
+```java
+private void getClientConnection() {
+    try {
+        // Ensure timeout is set (should already be from constructor, but verify)
+        if (srvr.getSoTimeout() != 5000) {
+            srvr.setSoTimeout(5000);  // 5 seconds - REQUIRED
+        }
+        skt = srvr.accept();
+        // CRITICAL: Keep timeout at 5000 (DO NOT reset to 0)
+        // This ensures subsequent accept() calls after client disconnect are also non-blocking
+        srvr.setSoTimeout(5000);  // Keep timeout for next connection - REQUIRED
+    } catch (java.net.SocketTimeoutException e) {
+        logger.debug("No client connection yet...");  // Debug level, NOT error
+        skt = null;
+        return;  // Allow protocol handler loop to continue
+    }
+}
+```
+
+**Why Critical:** Without timeout, `accept()` blocks indefinitely, preventing:
+- Protocol handler initialization
+- Processing other operations  
+- Being ready when clients connect (requires workaround: switch ports 6800→6551→restart)
+
+**Key Insight:** The ServerSocket timeout must ALWAYS be 5000ms, never reset to 0. This ensures:
+- First `accept()` call is non-blocking (timeout set in constructor)
+- Subsequent `accept()` calls after client disconnect are also non-blocking
+- Protocol handler loop never blocks waiting for connections
+
+**Timeout Exception Handling:**
+```java
+catch (java.net.SocketTimeoutException e) {
+    logger.debug("No client connection yet...");  // Debug level, NOT error
+    skt = null;
+    return;  // Allow protocol handler loop to continue
+}
+```
+
+**Client Socket Configuration:**
+```java
+skt.setTcpNoDelay(true);
+skt.setSoTimeout(0);  // Blocking reads after connection - REQUIRED (client socket only)
+```
+
+### Anti-Patterns (NEVER DO)
+
+❌ **Blocking accept() without timeout:**
+```java
+skt = srvr.accept();  // WRONG - blocks protocol handler indefinitely
+```
+
+❌ **Resetting ServerSocket timeout to 0 after accept():**
+```java
+srvr.setSoTimeout(5000);
+skt = srvr.accept();
+srvr.setSoTimeout(0);  // WRONG - next accept() will block if client disconnects
+```
+
+❌ **Not setting timeout in constructor:**
+```java
+public DWTCPDevice(...) {
+    srvr = new ServerSocket(...);
+    // Missing: srvr.setSoTimeout(5000);  // WRONG - first accept() will block
+}
+```
+
+❌ **Logging timeout as error:**
+```java
+logger.error("Timeout waiting for connection");  // WRONG - creates noise
+```
+
+❌ **Read timeout on client socket:**
+```java
+skt.setSoTimeout(10000);  // WRONG - causes premature disconnections
+```
+
+**Historical Context:** The "workaround problem" (switch VCC ports 6800→6551→restart) was caused by:
+1. Blocking `accept()` preventing protocol handler initialization
+2. Resetting ServerSocket timeout to 0 after accepting, causing blocking on subsequent `accept()` calls
+
+The solution: **ALWAYS keep ServerSocket timeout at 5000ms** - set it in constructor and never reset it to 0. This ensures the protocol handler loop never blocks, eliminating the need for workarounds. **Never revert to blocking accept()** - it breaks connection flow.
+
+---
+
+## Prompting Shortcuts (Use Cases)
+
+* “Audit our Java 8 Swing app for Java 17/21 + JavaFX migration; produce a phased plan with a component-mapping table and risk list.”
+* “Generate a JavaFX FXML + controller for a ‘DriveWire Monitor’ panel (port dropdown, connect/disconnect, live TX/RX counters, hex log with pause/filter).”
+* “Build a jSerialComm DW client with encoder/decoder, retries, and a background executor; expose view-model observables for UI binding.”
+* “Refactor blocking serial loops to virtual threads; benchmark vs fixed thread pool; provide rollback.”
+* “Create a jpackage config for macOS/Windows/Linux with JavaFX modules and runtime image (jlink).”
+
+---
+
+## Definition of Done
+
+* **Builds clean** on target JDK(s); tests green; perf within ±10% baseline or improved.
+* **DriveWire module**: reliable connect/exchange under load, survives cable replug; actionable logs/metrics.
+* **JavaFX UI**: responsive layouts, no FX-thread violations, accessible & localizable basics in place, dark/light theme supported.
+* **Ops ready**: runbooks & configs allow another engineer to reproduce on Windows/macOS/Linux without ad-hoc fixes.

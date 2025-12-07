@@ -74,6 +74,11 @@ public class MainWindowController {
     private boolean darkModeEnabled = false;
     private ObservableList<DiskTableItem> diskTableData = FXCollections.observableArrayList();
     
+    // Per-drive tracking for delta calculation (similar to graph approach)
+    private int[] lastReads = new int[256];
+    private int[] lastWrites = new int[256];
+    private boolean diskActivityTrackingInitialized = false;
+    
     /**
      * Initialize the controller after FXML loading.
      */
@@ -103,6 +108,7 @@ public class MainWindowController {
         // Prevent column header text truncation - ensure minimum widths accommodate full text
         ledColumn.setMinWidth(65);    // "LED" needs at least 65px (with padding)
         driveColumn.setMinWidth(85);  // "Drive" needs at least 85px (with padding)
+        fileColumn.setMinWidth(150);  // "File" needs at least 150px to fit filenames like "HANGMAN.DSK" without truncation
         readsColumn.setMinWidth(70);  // "Reads" needs at least 70px
         writesColumn.setMinWidth(75); // "Writes" needs at least 75px
         
@@ -294,6 +300,9 @@ public class MainWindowController {
         // Set up listeners to save UI layout when changed
         setupUILayoutListeners();
         
+        // Load existing log items into the log text area
+        loadExistingLogs();
+        
         // Start disk table updater thread
         if (MainWin.diskTableUpdater == null) {
             MainWin.diskTableUpdater = new DiskTableUpdateThread();
@@ -399,6 +408,17 @@ public class MainWindowController {
                     }
                 }
                 
+                // Load selected tab in Advanced view
+                if (outputTabPane != null) {
+                    int selectedTabIndex = MainWin.config.getInt("AdvancedView_SelectedTab", 0);
+                    // Clamp to valid range (0-2: Log, Command, Statistics)
+                    selectedTabIndex = Math.max(0, Math.min(2, selectedTabIndex));
+                    if (selectedTabIndex < outputTabPane.getTabs().size()) {
+                        outputTabPane.getSelectionModel().select(selectedTabIndex);
+                        System.out.println("Loaded selected tab index: " + selectedTabIndex);
+                    }
+                }
+                
                 System.out.println("Loaded UI layout from config");
             } catch (Exception e) {
                 System.err.println("Error loading UI layout: " + e.getMessage());
@@ -495,6 +515,17 @@ public class MainWindowController {
                 }
             });
         }
+        
+        // Listen for tab selection changes in Advanced view
+        if (outputTabPane != null) {
+            outputTabPane.getSelectionModel().selectedIndexProperty().addListener((obs, oldVal, newVal) -> {
+                if (oldVal != null && newVal != null && !oldVal.equals(newVal)) {
+                    System.out.println("Tab selection changed: " + oldVal + " -> " + newVal);
+                    // Save immediately when tab changes (no debounce needed for tab selection)
+                    saveUILayout();
+                }
+            });
+        }
     }
     
     /**
@@ -531,6 +562,13 @@ public class MainWindowController {
             }
             if (writesColumn != null) {
                 MainWin.config.setProperty("DiskTable_Writes_Width", writesColumn.getWidth());
+            }
+            
+            // Save selected tab in Advanced view
+            if (outputTabPane != null) {
+                int selectedIndex = outputTabPane.getSelectionModel().getSelectedIndex();
+                MainWin.config.setProperty("AdvancedView_SelectedTab", selectedIndex);
+                System.out.println("Saved selected tab index: " + selectedIndex);
             }
             
             // Save config (auto-save should handle this, but ensure it's saved)
@@ -814,10 +852,213 @@ public class MainWindowController {
      */
     public void appendLog(String text) {
         Platform.runLater(() -> {
-            logTextArea.appendText(text + "\n");
-            // Auto-scroll to bottom
-            logTextArea.setScrollTop(Double.MAX_VALUE);
+            if (logTextArea != null) {
+                logTextArea.appendText(text + "\n");
+                // Auto-scroll to bottom
+                logTextArea.setScrollTop(Double.MAX_VALUE);
+            }
         });
+    }
+    
+    /**
+     * Load existing log items from MainWin.logItems into the log text area.
+     */
+    private void loadExistingLogs() {
+        if (MainWin.logItems != null && logTextArea != null) {
+            Platform.runLater(() -> {
+                synchronized (MainWin.logItems) {
+                    for (LogItem item : MainWin.logItems) {
+                        logTextArea.appendText(item.toString() + "\n");
+                    }
+                    // Scroll to bottom after loading
+                    logTextArea.setScrollTop(Double.MAX_VALUE);
+                }
+            });
+        }
+    }
+    
+    /**
+     * Start per-drive disk activity tracking using the same delta approach as the graph.
+     * This samples per-drive reads/writes and calculates deltas to update the table.
+     */
+    private void startDiskActivityTracking() {
+        // Initialize tracking arrays
+        for (int i = 0; i < 256; i++) {
+            lastReads[i] = 0;
+            lastWrites[i] = 0;
+        }
+        
+        // Start background thread to sample disk activity
+        Thread activityTracker = new Thread(() -> {
+            int interval = 2000; // Same interval as graph (2 seconds)
+            
+            // Wait for server status to be available
+            int waitCount = 0;
+            while (MainWin.serverStatus == null && waitCount < 50) {
+                try {
+                    Thread.sleep(interval);
+                    waitCount++;
+                } catch (InterruptedException e) {
+                    return;
+                }
+            }
+            
+            if (MainWin.serverStatus == null) {
+                System.err.println("DiskActivityTracker: Server status never became available");
+                return;
+            }
+            
+            System.out.println("DiskActivityTracker: Starting per-drive activity tracking");
+            
+            // Initialize baseline values for each drive
+            initializeDiskActivityBaselines();
+            diskActivityTrackingInitialized = true;
+            
+            try {
+                Thread.sleep(interval); // Wait one interval before starting delta calculations
+            } catch (InterruptedException e) {
+                return;
+            }
+            
+            // Main tracking loop
+            while (MainWin.serverStatus != null) {
+                try {
+                    // Sample current reads/writes for each drive
+                    for (int drive = 0; drive < 256; drive++) {
+                        final int driveNum = drive; // Make final for lambda
+                        if (MainWin.disks[driveNum] != null && MainWin.disks[driveNum].isLoaded()) {
+                            // Get current cumulative values
+                            Object readsObj = MainWin.disks[driveNum].getParam("_reads");
+                            Object writesObj = MainWin.disks[driveNum].getParam("_writes");
+                            String readsStr = readsObj != null ? readsObj.toString() : null;
+                            String writesStr = writesObj != null ? writesObj.toString() : null;
+                            
+                            if (readsStr != null && !readsStr.isEmpty()) {
+                                try {
+                                    int currentReads = Integer.parseInt(readsStr);
+                                    int deltaReads = currentReads - lastReads[driveNum];
+                                    
+                                    if (deltaReads > 0) {
+                                        // Update table with current cumulative value
+                                        final int finalReads = currentReads;
+                                        Platform.runLater(() -> {
+                                            if (driveNum < diskTableData.size()) {
+                                                DiskTableItem item = diskTableData.get(driveNum);
+                                                if (item != null) {
+                                                    item.setReads(finalReads);
+                                                    // Set LED to green for read activity
+                                                    item.setLed(1);
+                                                    diskTable.refresh();
+                                                }
+                                            }
+                                        });
+                                    }
+                                    
+                                    lastReads[driveNum] = currentReads;
+                                } catch (NumberFormatException e) {
+                                    // Ignore invalid values
+                                }
+                            }
+                            
+                            if (writesStr != null && !writesStr.isEmpty()) {
+                                try {
+                                    int currentWrites = Integer.parseInt(writesStr);
+                                    int deltaWrites = currentWrites - lastWrites[driveNum];
+                                    
+                                    if (deltaWrites > 0) {
+                                        // Update table with current cumulative value
+                                        final int finalWrites = currentWrites;
+                                        Platform.runLater(() -> {
+                                            if (driveNum < diskTableData.size()) {
+                                                DiskTableItem item = diskTableData.get(driveNum);
+                                                if (item != null) {
+                                                    item.setWrites(finalWrites);
+                                                    // Set LED to red for write activity
+                                                    item.setLed(2);
+                                                    diskTable.refresh();
+                                                }
+                                            }
+                                        });
+                                    }
+                                    
+                                    lastWrites[driveNum] = currentWrites;
+                                } catch (NumberFormatException e) {
+                                    // Ignore invalid values
+                                }
+                            }
+                            
+                            // If no activity, ensure LED is off (but keep reads/writes values)
+                            if (readsStr != null && writesStr != null) {
+                                try {
+                                    int currentReads = Integer.parseInt(readsStr);
+                                    int currentWrites = Integer.parseInt(writesStr);
+                                    int deltaReads = currentReads - lastReads[driveNum];
+                                    int deltaWrites = currentWrites - lastWrites[driveNum];
+                                    
+                                    if (deltaReads == 0 && deltaWrites == 0) {
+                                        // No activity in this interval - turn off LED if it was on
+                                        Platform.runLater(() -> {
+                                            if (driveNum < diskTableData.size()) {
+                                                DiskTableItem item = diskTableData.get(driveNum);
+                                                if (item != null && item.getLed() != 0) {
+                                                    // Only turn off LED if there's truly no activity
+                                                    // (reads/writes haven't changed)
+                                                    item.setLed(0);
+                                                    diskTable.refresh();
+                                                }
+                                            }
+                                        });
+                                    }
+                                } catch (NumberFormatException e) {
+                                    // Ignore
+                                }
+                            }
+                        }
+                    }
+                    
+                    Thread.sleep(interval);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        });
+        
+        activityTracker.setDaemon(true);
+        activityTracker.setName("DiskActivityTracker");
+        activityTracker.start();
+        System.out.println("Per-drive disk activity tracking started");
+    }
+    
+    /**
+     * Initialize baseline values for disk activity tracking.
+     * This is called once before starting delta calculations.
+     */
+    private void initializeDiskActivityBaselines() {
+        for (int drive = 0; drive < 256; drive++) {
+            if (MainWin.disks[drive] != null && MainWin.disks[drive].isLoaded()) {
+                Object readsObj = MainWin.disks[drive].getParam("_reads");
+                Object writesObj = MainWin.disks[drive].getParam("_writes");
+                String readsStr = readsObj != null ? readsObj.toString() : null;
+                String writesStr = writesObj != null ? writesObj.toString() : null;
+                
+                if (readsStr != null && !readsStr.isEmpty()) {
+                    try {
+                        lastReads[drive] = Integer.parseInt(readsStr);
+                    } catch (NumberFormatException e) {
+                        lastReads[drive] = 0;
+                    }
+                }
+                
+                if (writesStr != null && !writesStr.isEmpty()) {
+                    try {
+                        lastWrites[drive] = Integer.parseInt(writesStr);
+                    } catch (NumberFormatException e) {
+                        lastWrites[drive] = 0;
+                    }
+                }
+            }
+        }
+        System.out.println("Disk activity baselines initialized");
     }
     
     /**

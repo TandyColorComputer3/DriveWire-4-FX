@@ -40,14 +40,23 @@ public class GrapherThreadFX implements Runnable {
     
     private int pos = 0;
     
-    // JavaFX colors (replacing SWT Color)
-    private Color colorGraphBGH = Color.rgb(0x90, 0x90, 0x90);
-    private Color colorGraphBGL = Color.rgb(0x30, 0x30, 0x30);
-    private Color colorLabel = Color.rgb(0xB5, 0xB5, 0xB5);
-    private Color colorDiskOps = Color.rgb(0x80, 0x80, 0xB5);
-    private Color colorMemGraphTotal = Color.rgb(0x80, 0xB5, 0x80);
-    private Color colorMemGraphUsed = Color.rgb(0xB5, 0x80, 0x80);
-    private Color colorVSerialOps = Color.rgb(0x80, 0xB5, 0xB5);
+    // Modern color scheme - dark theme with vibrant accents
+    private Color colorGraphBG = Color.rgb(0x1A, 0x1A, 0x2E);  // Dark blue-gray background
+    private Color colorGraphBGLight = Color.rgb(0x2A, 0x2A, 0x3E);  // Slightly lighter for gradient
+    private Color colorGrid = Color.rgb(0x3A, 0x3A, 0x4E);  // Subtle grid lines
+    private Color colorLabel = Color.rgb(0xCC, 0xCC, 0xDD);  // Light gray for labels
+    
+    // Vibrant modern colors for graphs
+    private Color colorDiskOps = Color.rgb(0x00, 0xFF, 0xFF);  // Cyan
+    private Color colorDiskOpsGlow = Color.rgb(0x00, 0xFF, 0xFF, 0.3);  // Cyan glow
+    
+    private Color colorMemGraphTotal = Color.rgb(0x00, 0xFF, 0x88);  // Green
+    private Color colorMemGraphTotalGlow = Color.rgb(0x00, 0xFF, 0x88, 0.3);  // Green glow
+    private Color colorMemGraphUsed = Color.rgb(0xFF, 0x44, 0x88);  // Pink
+    private Color colorMemGraphUsedGlow = Color.rgb(0xFF, 0x44, 0x88, 0.3);  // Pink glow
+    
+    private Color colorVSerialOps = Color.rgb(0xAA, 0x66, 0xFF);  // Purple
+    private Color colorVSerialOpsGlow = Color.rgb(0xAA, 0x66, 0xFF, 0.3);  // Purple glow
     
     // JavaFX Canvas references (set by MainWindowController)
     private Canvas canvasMemUse;
@@ -80,8 +89,8 @@ public class GrapherThreadFX implements Runnable {
             imageVSerialOps = new WritableImage((int)vserialCanvas.getWidth(), (int)vserialCanvas.getHeight());
         }
         
-        // Initialize font
-        graphFont = Font.font("Segoe UI", FontWeight.NORMAL, 11);
+        // Initialize modern font
+        graphFont = Font.font("Segoe UI", FontWeight.BOLD, 10);
     }
     
     @Override
@@ -192,54 +201,108 @@ public class GrapherThreadFX implements Runnable {
         double vscale = height / maxmem;
         double hscale = width / samples;
         
-        // Clear and draw gradient background
-        gc.setFill(createGradient(colorGraphBGH, colorGraphBGL, width + xlabel, height + ylabel + topgap));
+        // Clear and draw modern dark gradient background
+        gc.setFill(createGradient(colorGraphBG, colorGraphBGLight, width + xlabel, height + ylabel + topgap));
         gc.fillRect(0, 0, width + xlabel, height + ylabel + topgap);
         
-        // Draw memory samples
+        // Draw subtle grid lines first
+        gc.setStroke(colorGrid);
+        gc.setLineWidth(0.5);
+        for (int i = 1; i < 5; i++) {
+            double y = i * (height / 5);
+            gc.strokeLine(0, y + topgap, width, y + topgap);
+        }
+        
+        // Build smooth line paths for memory graphs
+        double[] totalX = new double[samples];
+        double[] totalY = new double[samples];
+        double[] usedX = new double[samples];
+        double[] usedY = new double[samples];
+        int validSamples = 0;
+        
         for (int i = 0; i < samples; i++) {
             int samp = pos + 1 + i;
             if (samp > (samples - 1))
                 samp = samp - samples;
             
             if (memtsamp[samp] > 0) {
-                // Total memory line
-                gc.setFill(colorMemGraphTotal);
-                double top = memtsamp[samp] * vscale;
-                gc.fillRect(i * hscale, height - top + topgap, 1, 2);
-                
-                // Used memory bar
-                gc.setFill(colorMemGraphUsed);
+                double x = i * hscale + hscale / 2;
+                double totalTop = memtsamp[samp] * vscale;
                 double usedTop = (memtsamp[samp] - memfsamp[samp]) * vscale;
-                gc.fillRect(i * hscale, height - usedTop + topgap, hscale, usedTop);
+                
+                totalX[validSamples] = x;
+                totalY[validSamples] = height - totalTop + topgap;
+                usedX[validSamples] = x;
+                usedY[validSamples] = height - usedTop + topgap;
+                validSamples++;
             }
         }
         
-        // Draw grid lines and labels
-        gc.setFont(graphFont);
-        gc.setStroke(colorGraphBGL);
-        gc.setLineWidth(1);
-        gc.setLineDashes(2, 2);
+        // Draw gradient area fill for used memory (with glow effect)
+        if (validSamples > 1) {
+            gc.setFill(createGradientArea(colorMemGraphUsed, colorMemGraphUsedGlow, height + topgap));
+            gc.beginPath();
+            gc.moveTo(usedX[0], height + topgap);
+            for (int i = 0; i < validSamples; i++) {
+                if (i == 0) {
+                    gc.lineTo(usedX[i], usedY[i]);
+                } else {
+                    // Smooth curve using quadratic bezier
+                    double cpx = (usedX[i-1] + usedX[i]) / 2;
+                    double cpy = (usedY[i-1] + usedY[i]) / 2;
+                    gc.quadraticCurveTo(usedX[i-1], usedY[i-1], cpx, cpy);
+                }
+            }
+            gc.lineTo(usedX[validSamples-1], height + topgap);
+            gc.closePath();
+            gc.fill();
+            
+            // Draw smooth line for used memory with glow
+            gc.setStroke(colorMemGraphUsed);
+            gc.setLineWidth(2.5);
+            gc.beginPath();
+            gc.moveTo(usedX[0], usedY[0]);
+            for (int i = 1; i < validSamples; i++) {
+                double cpx = (usedX[i-1] + usedX[i]) / 2;
+                double cpy = (usedY[i-1] + usedY[i]) / 2;
+                gc.quadraticCurveTo(usedX[i-1], usedY[i-1], cpx, cpy);
+            }
+            gc.stroke();
+        }
         
+        // Draw smooth line for total memory
+        if (validSamples > 1) {
+            gc.setStroke(colorMemGraphTotal);
+            gc.setLineWidth(2);
+            gc.beginPath();
+            gc.moveTo(totalX[0], totalY[0]);
+            for (int i = 1; i < validSamples; i++) {
+                double cpx = (totalX[i-1] + totalX[i]) / 2;
+                double cpy = (totalY[i-1] + totalY[i]) / 2;
+                gc.quadraticCurveTo(totalX[i-1], totalY[i-1], cpx, cpy);
+            }
+            gc.stroke();
+        }
+        
+        // Draw grid labels
+        gc.setFont(graphFont);
+        gc.setFill(colorLabel);
         for (int i = 0; i < 5; i++) {
             double y = i * (height / 5);
             double mb = (height - y) / vscale / 1024.0;
-            
-            gc.setFill(colorLabel);
-            gc.fillText(String.format("%d MB", (int)Math.round(mb)), width + 4, y - 5 + topgap);
-            
-            gc.strokeLine(0, y + topgap, width, y + topgap);
+            gc.fillText(String.format("%d MB", (int)Math.round(mb)), width + 6, y + 4 + topgap);
         }
         
-        gc.setLineDashes(null);
-        
-        // Draw info text
+        // Draw modern info text with better styling
+        // Use the most recent sample (pos-1, wrapping around if needed)
+        int latestPos = (pos > 0) ? pos - 1 : samples - 1;
         gc.setFill(colorLabel);
-        double totalMB = memtsamp[pos] / 1024.0;
-        double usedMB = (memtsamp[pos] - memfsamp[pos]) / 1024.0;
-        double freeMB = memfsamp[pos] / 1024.0;
+        gc.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9));
+        double totalMB = memtsamp[latestPos] / 1024.0;
+        double usedMB = (memtsamp[latestPos] - memfsamp[latestPos]) / 1024.0;
+        double freeMB = memfsamp[latestPos] / 1024.0;
         gc.fillText(String.format("Total: %.1f MB   Used: %.1f MB   Free: %.1f MB", 
-            totalMB, usedMB, freeMB), 5, height + 5 + topgap);
+            totalMB, usedMB, freeMB), 8, height + 12 + topgap);
     }
     
     /**
@@ -264,45 +327,84 @@ public class GrapherThreadFX implements Runnable {
         double vscale = height / maxdisk;
         double hscale = width / samples;
         
-        // Clear and draw gradient background
-        gc.setFill(createGradient(colorGraphBGH, colorGraphBGL, width + xlabel, height + ylabel + topgap));
+        // Clear and draw modern dark gradient background
+        gc.setFill(createGradient(colorGraphBG, colorGraphBGLight, width + xlabel, height + ylabel + topgap));
         gc.fillRect(0, 0, width + xlabel, height + ylabel + topgap);
         
-        // Draw disk operation bars
+        // Draw subtle grid lines first
+        gc.setStroke(colorGrid);
+        gc.setLineWidth(0.5);
+        for (int i = 1; i < 5; i++) {
+            double y = i * (height / 5);
+            gc.strokeLine(0, y + topgap, width, y + topgap);
+        }
+        
+        // Build smooth line path for disk operations
+        double[] xPoints = new double[samples];
+        double[] yPoints = new double[samples];
+        int validSamples = 0;
+        
         for (int i = 0; i < samples; i++) {
             int samp = pos + 1 + i;
             if (samp > (samples - 1))
                 samp = samp - samples;
             
             if (disksamp[samp] > 0) {
-                gc.setFill(colorDiskOps);
+                xPoints[validSamples] = i * hscale + hscale / 2;
                 double top = disksamp[samp] * vscale;
-                gc.fillRect(i * hscale, height - top + topgap, hscale, top);
+                yPoints[validSamples] = height - top + topgap;
+                validSamples++;
             }
         }
         
-        // Draw grid lines and labels
-        gc.setFont(graphFont);
-        gc.setStroke(colorGraphBGL);
-        gc.setLineWidth(1);
-        gc.setLineDashes(2, 2);
+        // Draw gradient area fill with glow effect
+        if (validSamples > 1) {
+            gc.setFill(createGradientArea(colorDiskOps, colorDiskOpsGlow, height + topgap));
+            gc.beginPath();
+            gc.moveTo(xPoints[0], height + topgap);
+            for (int i = 0; i < validSamples; i++) {
+                if (i == 0) {
+                    gc.lineTo(xPoints[i], yPoints[i]);
+                } else {
+                    // Smooth curve using quadratic bezier
+                    double cpx = (xPoints[i-1] + xPoints[i]) / 2;
+                    double cpy = (yPoints[i-1] + yPoints[i]) / 2;
+                    gc.quadraticCurveTo(xPoints[i-1], yPoints[i-1], cpx, cpy);
+                }
+            }
+            gc.lineTo(xPoints[validSamples-1], height + topgap);
+            gc.closePath();
+            gc.fill();
+            
+            // Draw smooth line with glow
+            gc.setStroke(colorDiskOps);
+            gc.setLineWidth(3);
+            gc.beginPath();
+            gc.moveTo(xPoints[0], yPoints[0]);
+            for (int i = 1; i < validSamples; i++) {
+                double cpx = (xPoints[i-1] + xPoints[i]) / 2;
+                double cpy = (yPoints[i-1] + yPoints[i]) / 2;
+                gc.quadraticCurveTo(xPoints[i-1], yPoints[i-1], cpx, cpy);
+            }
+            gc.stroke();
+        }
         
+        // Draw grid labels
+        gc.setFont(graphFont);
+        gc.setFill(colorLabel);
         for (int i = 0; i < 5; i++) {
             double y = i * (height / 5);
             double ops = (height - y) / vscale;
-            
-            gc.setFill(colorLabel);
-            gc.fillText(String.format("%d", (int)Math.round(ops)), width + 4, y - 5 + topgap);
-            
-            gc.strokeLine(0, y + topgap, width, y + topgap);
+            gc.fillText(String.format("%d", (int)Math.round(ops)), width + 6, y + 4 + topgap);
         }
         
-        gc.setLineDashes(null);
-        
-        // Draw info text
+        // Draw modern info text
+        // Use the most recent sample (pos-1, wrapping around if needed)
+        int latestPos = (pos > 0) ? pos - 1 : samples - 1;
         gc.setFill(colorLabel);
+        gc.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9));
         gc.fillText(String.format("Disk operations/sec:  %d   Max:  %d", 
-            this.disksamp[pos], this.diskmax), 5, height + 5 + topgap);
+            this.disksamp[latestPos], this.diskmax), 8, height + 12 + topgap);
     }
     
     /**
@@ -327,45 +429,84 @@ public class GrapherThreadFX implements Runnable {
         double vscale = height / maxops;
         double hscale = width / samples;
         
-        // Clear and draw gradient background
-        gc.setFill(createGradient(colorGraphBGH, colorGraphBGL, width + xlabel, height + ylabel + topgap));
+        // Clear and draw modern dark gradient background
+        gc.setFill(createGradient(colorGraphBG, colorGraphBGLight, width + xlabel, height + ylabel + topgap));
         gc.fillRect(0, 0, width + xlabel, height + ylabel + topgap);
         
-        // Draw vserial operation bars
+        // Draw subtle grid lines first
+        gc.setStroke(colorGrid);
+        gc.setLineWidth(0.5);
+        for (int i = 1; i < 5; i++) {
+            double y = i * (height / 5);
+            gc.strokeLine(0, y + topgap, width, y + topgap);
+        }
+        
+        // Build smooth line path for vserial operations
+        double[] xPoints = new double[samples];
+        double[] yPoints = new double[samples];
+        int validSamples = 0;
+        
         for (int i = 0; i < samples; i++) {
             int samp = pos + 1 + i;
             if (samp > (samples - 1))
                 samp = samp - samples;
             
             if (vsersamp[samp] > 0) {
-                gc.setFill(colorVSerialOps);
+                xPoints[validSamples] = i * hscale + hscale / 2;
                 double top = vsersamp[samp] * vscale;
-                gc.fillRect(i * hscale, height - top + topgap, hscale, top);
+                yPoints[validSamples] = height - top + topgap;
+                validSamples++;
             }
         }
         
-        // Draw grid lines and labels
-        gc.setFont(graphFont);
-        gc.setStroke(colorGraphBGL);
-        gc.setLineWidth(1);
-        gc.setLineDashes(2, 2);
+        // Draw gradient area fill with glow effect
+        if (validSamples > 1) {
+            gc.setFill(createGradientArea(colorVSerialOps, colorVSerialOpsGlow, height + topgap));
+            gc.beginPath();
+            gc.moveTo(xPoints[0], height + topgap);
+            for (int i = 0; i < validSamples; i++) {
+                if (i == 0) {
+                    gc.lineTo(xPoints[i], yPoints[i]);
+                } else {
+                    // Smooth curve using quadratic bezier
+                    double cpx = (xPoints[i-1] + xPoints[i]) / 2;
+                    double cpy = (yPoints[i-1] + yPoints[i]) / 2;
+                    gc.quadraticCurveTo(xPoints[i-1], yPoints[i-1], cpx, cpy);
+                }
+            }
+            gc.lineTo(xPoints[validSamples-1], height + topgap);
+            gc.closePath();
+            gc.fill();
+            
+            // Draw smooth line with glow
+            gc.setStroke(colorVSerialOps);
+            gc.setLineWidth(3);
+            gc.beginPath();
+            gc.moveTo(xPoints[0], yPoints[0]);
+            for (int i = 1; i < validSamples; i++) {
+                double cpx = (xPoints[i-1] + xPoints[i]) / 2;
+                double cpy = (yPoints[i-1] + yPoints[i]) / 2;
+                gc.quadraticCurveTo(xPoints[i-1], yPoints[i-1], cpx, cpy);
+            }
+            gc.stroke();
+        }
         
+        // Draw grid labels
+        gc.setFont(graphFont);
+        gc.setFill(colorLabel);
         for (int i = 0; i < 5; i++) {
             double y = i * (height / 5);
             double ops = (height - y) / vscale;
-            
-            gc.setFill(colorLabel);
-            gc.fillText(String.format("%d", (int)Math.round(ops)), width + 4, y - 5 + topgap);
-            
-            gc.strokeLine(0, y + topgap, width, y + topgap);
+            gc.fillText(String.format("%d", (int)Math.round(ops)), width + 6, y + 4 + topgap);
         }
         
-        gc.setLineDashes(null);
-        
-        // Draw info text
+        // Draw modern info text
+        // Use the most recent sample (pos-1, wrapping around if needed)
+        int latestPos = (pos > 0) ? pos - 1 : samples - 1;
         gc.setFill(colorLabel);
+        gc.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9));
         gc.fillText(String.format("Virtual serial operations/sec:  %d   Max:  %d", 
-            this.vsersamp[pos], this.vsmax), 5, height + 5 + topgap);
+            this.vsersamp[latestPos], this.vsmax), 8, height + 12 + topgap);
     }
     
     /**
@@ -378,6 +519,20 @@ public class GrapherThreadFX implements Runnable {
             javafx.scene.paint.CycleMethod.NO_CYCLE,
             new javafx.scene.paint.Stop(0, from),
             new javafx.scene.paint.Stop(1, to)
+        );
+    }
+    
+    /**
+     * Create a vertical gradient for area fills (bright at top, transparent at bottom).
+     */
+    private javafx.scene.paint.LinearGradient createGradientArea(Color color, Color glowColor, double bottomY) {
+        return new javafx.scene.paint.LinearGradient(
+            0, 0, 0, bottomY,
+            false,
+            javafx.scene.paint.CycleMethod.NO_CYCLE,
+            new javafx.scene.paint.Stop(0, color),
+            new javafx.scene.paint.Stop(0.7, glowColor),
+            new javafx.scene.paint.Stop(1, Color.TRANSPARENT)
         );
     }
     

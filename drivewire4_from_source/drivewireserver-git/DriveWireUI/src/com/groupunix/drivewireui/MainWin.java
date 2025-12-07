@@ -3777,14 +3777,44 @@ public class MainWin {
                             synchronized (logItems) {
                                 MainWin.logItems.add(litem);
                             }
-                            // TODO: Update JavaFX log table when implemented
-                            // For now, just add to logItems list
+                            // Update JavaFX log text area
+                            if (MainWin.mainWindowController != null) {
+                                try {
+                                    java.lang.reflect.Method appendLogMethod = MainWin.mainWindowController.getClass().getMethod("appendLog", String.class);
+                                    // Format log item as string for display
+                                    String logText = litem.toString();
+                                    appendLogMethod.invoke(MainWin.mainWindowController, logText);
+                                } catch (Exception e) {
+                                    // Fallback: just add to logItems if controller method not available
+                                    System.err.println("Failed to append log to JavaFX UI: " + e.getMessage());
+                                }
+                            }
                         }
                     });
                 } catch (Exception e) {
                     // Fallback: add directly to logItems
                     synchronized (logItems) {
                         MainWin.logItems.add(litem);
+                    }
+                    // Try to update UI if controller is available
+                    if (MainWin.mainWindowController != null) {
+                        try {
+                            Class<?> platformClass = Class.forName("javafx.application.Platform");
+                            java.lang.reflect.Method runLaterMethod = platformClass.getMethod("runLater", Runnable.class);
+                            final String logText = litem.toString();
+                            runLaterMethod.invoke(null, new Runnable() {
+                                public void run() {
+                                    try {
+                                        java.lang.reflect.Method appendLogMethod = MainWin.mainWindowController.getClass().getMethod("appendLog", String.class);
+                                        appendLogMethod.invoke(MainWin.mainWindowController, logText);
+                                    } catch (Exception ex) {
+                                        System.err.println("Failed to append log: " + ex.getMessage());
+                                    }
+                                }
+                            });
+                        } catch (Exception ex) {
+                            System.err.println("Failed to update log UI: " + ex.getMessage());
+                        }
                     }
                 }
             } else {

@@ -1,0 +1,26 @@
+=== MainWinFX.main() called ===
+JavaFX version: 21.0.9
+Java version: 21.0.9
+Launching JavaFX application...
+Platform.isFxApplicationThread: false
+Calling Application.launch()...
+=== MainWinFX.init() called ===
+Logging initialized
+Exception handler set
+Loading configuration...
+Configuration loaded successfully
+Starting local server in background...
+Server will start after UI is shown
+Set drivewire.ui.mode property
+Initializing library roots...
+Library roots initialized
+NineServer thread started
+Grapher thread started
+=== MainWinFX.init() completed ===
+About to return from init() - start() should be called next
+Platform check - isFxApplicationThread: false
+Libraries for platform gtk cannot be loaded because of incompatible environment
+=== MainWinFX.start() called ===
+Thread: JavaFX Application Thread
+Is JavaFX thread: true
+Stage is null: false

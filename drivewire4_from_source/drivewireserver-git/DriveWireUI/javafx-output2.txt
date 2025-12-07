@@ -1,0 +1,22 @@
+=== MainWinFX.main() called ===
+JavaFX version: 21.0.9
+Java version: 21.0.9
+Launching JavaFX application...
+Platform.isFxApplicationThread: false
+Calling Application.launch()...
+=== MainWinFX.init() called ===
+Logging initialized
+Exception handler set
+Loading configuration...
+Configuration loaded successfully
+Starting local server in background...
+Server will start after UI is shown
+Initializing library roots...
+Library roots initialized
+NineServer thread started
+Grapher thread started
+=== MainWinFX.init() completed ===
+Libraries for platform gtk cannot be loaded because of incompatible environment
+=== MainWinFX.start() called ===
+05 Dec 2025 23:26:43 INFO  [JavaFX Application Thread] JavaFX start() method called
+Setting stage title...

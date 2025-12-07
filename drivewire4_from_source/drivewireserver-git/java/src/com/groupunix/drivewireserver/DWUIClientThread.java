@@ -179,7 +179,13 @@ public class DWUIClientThread implements Runnable {
 		if (this.commands.validate("dw")) {
 			logger.debug("DWCmd is available in command list");
 		} else {
-			logger.warn("DWCmd is NOT available in command list! Available commands: " + this.commands.getShortHelp());
+			// DWCmd is not available if instance is invalid - this is expected behavior
+			// Only log as warning if instance is valid (which would indicate a real problem)
+			if (DriveWireServer.isValidHandlerNo(this.instance)) {
+				logger.warn("DWCmd is NOT available in command list for valid instance " + this.instance + "! Available commands: " + this.commands.getShortHelp());
+			} else {
+				logger.debug("DWCmd is not available (instance " + this.instance + " is invalid - this is expected). Available commands: " + this.commands.getShortHelp());
+			}
 		}
 		
 		// wait for server/instance ready

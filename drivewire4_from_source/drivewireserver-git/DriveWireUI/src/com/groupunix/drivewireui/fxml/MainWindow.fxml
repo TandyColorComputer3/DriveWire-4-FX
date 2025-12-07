@@ -105,7 +105,7 @@
                      <columns>
                         <TableColumn fx:id="ledColumn" minWidth="65.0" prefWidth="65.0" text="LED" />
                         <TableColumn fx:id="driveColumn" minWidth="85.0" prefWidth="85.0" text="Drive" />
-                        <TableColumn fx:id="fileColumn" minWidth="200.0" prefWidth="200.0" text="File" />
+                        <TableColumn fx:id="fileColumn" minWidth="150.0" prefWidth="200.0" text="File" />
                         <TableColumn fx:id="readsColumn" minWidth="70.0" prefWidth="70.0" text="Reads" />
                         <TableColumn fx:id="writesColumn" minWidth="75.0" prefWidth="75.0" text="Writes" />
                      </columns>
@@ -161,22 +161,22 @@
                                  <content>
                                     <VBox styleClass="graphs-container" spacing="15">
                                        <children>
-                                          <VBox spacing="5" styleClass="graph-box">
+                                          <VBox spacing="5" styleClass="graph-box" alignment="CENTER">
                                              <children>
                                                 <Label text="Memory Usage" styleClass="graph-title" />
-                                                <Canvas fx:id="canvasMemUse" width="270" height="110" styleClass="graph-canvas" />
+                                                <Canvas fx:id="canvasMemUse" width="280" height="130" styleClass="graph-canvas" />
                                              </children>
                                           </VBox>
-                                          <VBox spacing="5" styleClass="graph-box">
+                                          <VBox spacing="5" styleClass="graph-box" alignment="CENTER">
                                              <children>
                                                 <Label text="Disk Operations/sec" styleClass="graph-title" />
-                                                <Canvas fx:id="canvasDiskOps" width="270" height="110" styleClass="graph-canvas" />
+                                                <Canvas fx:id="canvasDiskOps" width="280" height="130" styleClass="graph-canvas" />
                                              </children>
                                           </VBox>
-                                          <VBox spacing="5" styleClass="graph-box">
+                                          <VBox spacing="5" styleClass="graph-box" alignment="CENTER">
                                              <children>
                                                 <Label text="Virtual Serial Ops/sec" styleClass="graph-title" />
-                                                <Canvas fx:id="canvasVSerialOps" width="270" height="110" styleClass="graph-canvas" />
+                                                <Canvas fx:id="canvasVSerialOps" width="280" height="130" styleClass="graph-canvas" />
                                              </children>
                                           </VBox>
                                        </children>
