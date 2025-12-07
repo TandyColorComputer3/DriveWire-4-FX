@@ -1,5 +1,7 @@
 # DriveWire 4 FX
 
+![DriveWire 4 FX Main Window](images/dw4_mainwinFX.png)
+
 ## Technical Fixes
 
 - ✅ Migrated UI from Eclipse SWT to JavaFX 21
